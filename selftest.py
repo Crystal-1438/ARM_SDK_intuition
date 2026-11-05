@@ -1275,12 +1275,12 @@ def test_headers(c):
         return
 
     # ---- 版本串 ----
-    cfg = _read(os.path.join(root, "libs/frame/frame_config.h"))
-    if cfg:
-        s = protocol.parse_version_string(cfg)
-        c.check("FRAME_VERSION_STRING 和 SDK metal_arm 一致",
-                s == metal_arm.VERSION_STRING,
-                "固件里是 %r，SDK 是 %r" % (s, metal_arm.VERSION_STRING))
+    for source, defs in (("metal.c", metal_arm), ("arx_x5.c", board_defs)):
+        cfg = _read(os.path.join(root, "App/profiles", source))
+        s = protocol.parse_version_string(cfg or "")
+        c.check("%s 版本串和 SDK 一致" % source,
+                s == defs.VERSION_STRING,
+                "固件里是 %r，SDK 是 %r" % (s, defs.VERSION_STRING))
 
     # ---- 码表 ----
     tid_h = _read(os.path.join(root, "libs/frame/type_id.h"))

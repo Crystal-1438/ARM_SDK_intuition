@@ -5,7 +5,7 @@ import math
 from ..protocol import fnv1a32
 from .common import *  # Shared protocol names are also part of each robot profile.
 
-# 固件 `libs/frame/frame_config.h` 的 FRAME_VERSION_STRING；版本码是其 FNV-1a 32。
+# 版本串与固件 App/profiles/arx_x5.c 一致；版本码为 FNV-1a 32 位哈希。
 VERSION_STRING = "Intuition-ARX-X5-2023-v0.3"
 VERSION_CODE = fnv1a32(VERSION_STRING)
 
