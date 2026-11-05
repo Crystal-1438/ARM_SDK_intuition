@@ -5,7 +5,7 @@
 
 协议版本串与版本码按型号定义在 `board_defs` 各模块（`VERSION_STRING` / `VERSION_CODE`）；
 板子那边的权威定义在 `libs/frame/frame.h`（帧格式）、`libs/frame/type_id.h`（码表和 payload
-布局）、`libs/frame/frame_config.h`（版本串）。
+布局）、`App/profiles/` 各机型的 `version_string`（版本串）。
 
     AA 55 | type_id | datalen | arm_id | crc8 | payload | crc16(LE)
      0  1  |    2    |    3    |    4   |  5   | 6..5+N  | 6+N 7+N
@@ -105,16 +105,6 @@ def fnv1a32(s):
     for b in s.encode("utf-8"):
         h = ((h ^ b) * 0x01000193) & 0xFFFFFFFF
     return h
-
-
-def parse_version_string(text):
-    """从 `frame_config.h` 的原文里抠出 FRAME_VERSION_STRING（给自测对拍用）。
-
-    找不到返回 None —— 那是"这文件里没这一项"，不是错误。
-    """
-    import re
-    m = re.search(r'FRAME_VERSION_STRING\s+"([^"]*)"', text)
-    return m.group(1) if m else None
 
 
 # arm_id 的语义：**arm_id 就是 CAN 总线索引**，0 = CAN1 = 臂A、1 = CAN2 = 臂B。

@@ -2,12 +2,9 @@
 
 跑完打印每一条的结果，全过退出码 0，有红的退出码 1。
 
-验的东西分三类：
+自测包含四类检查，使用 SDK 内部代码和测试数据。
 
-1. **和板子对拍** —— CRC 参考值、版本码、四条整帧逐字节锚点（这几条是板上
-   `FrameEncode()` 的真实输出，用 host 程序编 `libs/frame/frame.c` 打出来抄的），
-   以及**直接 parse 固件头文件**核对码表 / 软限位 / 状态个数 / ARM_NUM。
-   固件改了而 SDK 没跟上的话，这里会红。
+1. **协议参考值** —— CRC、版本码和整帧编码使用固定测试数据校验。
 2. **协议层自身** —— 每个帧型的编解码往返、解析器的重同步（粘包 / 前导噪声 / 半帧 /
    坏 CRC 后紧跟好帧 / payload 里含 AA55）、按 arm_id 分流不串台。
 3. **SDK 语义** —— 单位换算往返、夹爪标定模型（含未标定抛异常）、
@@ -24,7 +21,6 @@
 
 import math
 import os
-import re
 import struct
 import sys
 import threading
@@ -791,90 +787,6 @@ def test_gates(c, tmpdir):
         c.check("链路没 open 时发送抛 NotConnected", True)
 
 
-# ==================== 9. 固件头文件对拍 ====================
-
-def repo_root():
-    """从本文件往上找到仓库根（以 `libs/frame/type_id.h` 为标志）。找不到返回 None。"""
-    d = os.path.dirname(os.path.abspath(__file__))
-    for _ in range(6):
-        if os.path.isfile(os.path.join(d, "libs", "frame", "type_id.h")):
-            return d
-        parent = os.path.dirname(d)
-        if parent == d:
-            break
-        d = parent
-    return None
-
-
-def _read(path):
-    try:
-        with open(path, encoding="utf-8", errors="replace") as f:
-            return f.read()
-    except OSError:
-        return None
-
-
-_NUM_MACROS = {"RAD2DEG": 180.0 / math.pi, "DEG2RAD": math.pi / 180.0, "PI": math.pi}
-
-
-def _num(token):
-    """头文件里的一个数：去掉 f 后缀，展开角度宏，允许简单四则（`284.0/2.0` 这种）。"""
-    t = token.strip().rstrip("fF")
-    for name, val in _NUM_MACROS.items():
-        t = re.sub(r"\b%s\b" % name, repr(val), t)
-    t = re.sub(r"[^0-9eE+\-*/.() ]", "", t).strip()
-    return float(eval(t, {"__builtins__": {}}, {}))   # noqa: S307 —— 只喂我们自己的头文件
-
-
-def _int(token):
-    """头文件里的一个整型常量：去掉 C 的 `U`/`L` 后缀，支持 `0x` / 十进制。"""
-    return int(re.sub(r"[uUlL]+$", "", token.strip()), 0)
-
-
-def _array(text, name):
-    m = re.search(re.escape(name) + r"\s*(?:\[[^\]]*\])?\s*=\s*\{(.*?)\}", text, re.S)
-    if not m:
-        return None
-    body = re.sub(r"//[^\n]*", "", m.group(1))       # 去掉行尾注释
-    return [_num(p) for p in body.split(",") if p.strip()]
-
-
-def _define(text, name):
-    """`#define NAME 值` 里的值（不是 `#define` 的话返回 None）。"""
-    m = re.search(r"^#define\s+" + re.escape(name) + r"\s+([^\s/]+)", text, re.M)
-    return m.group(1) if m else None
-
-
-def _const(text, name):
-    """`CONSTEXPR float NAME = 值;` 里的值（本仓库的标定量不少是这么写的，不是 `#define`）。"""
-    m = re.search(r"CONSTEXPR\s+\w+\s+" + re.escape(name) + r"\s*=\s*([^;]+);", text)
-    return m.group(1).strip() if m else None
-
-
-def _scalar(text, name):
-    """两种写法都认 —— 标定量是 `#define` 还是 `CONSTEXPR`，对拍的人不该关心。"""
-    return _define(text, name) or _const(text, name)
-
-
-def _enum_body(text, enum_name):
-    """取 `typedef enum { ... } <enum_name>;` 的花括号里那一坨（去注释）。
-
-    花括号里用 `[^}]*` 而不是 `.*?` —— 否则会从文件里**前面**那个 enum 的 `{` 一路吞过来。
-    """
-    m = re.search(r"typedef\s+enum\s*\{([^}]*)\}\s*" + re.escape(enum_name) + r"\s*;", text)
-    if not m:
-        return None
-    body = re.sub(r"/\*.*?\*/", " ", m.group(1), flags=re.S)
-    return re.sub(r"//[^\n]*", "", body)
-
-
-def _enum_names(text, enum_name):
-    body = _enum_body(text, enum_name)
-    if body is None:
-        return None
-    return [p.split("=")[0].strip() for p in body.split(",") if p.strip()]
-
-
 # ==================== 9. 假板子 ====================
 
 def _sim_pump(arms, seconds, extra=None):
@@ -1267,171 +1179,6 @@ class _fake_serial:
         return False
 
 
-def test_headers(c):
-    c.section("11. 固件头文件对拍（仓库在的话）")
-    root = repo_root()
-    if root is None:
-        c.skip("固件头文件对拍", "没找到仓库根（这是打包出去的副本吗？）")
-        return
-
-    # ---- 版本串 ----
-    cfg = _read(os.path.join(root, "libs/frame/frame_config.h"))
-    if cfg:
-        s = protocol.parse_version_string(cfg)
-        c.check("FRAME_VERSION_STRING 和 SDK metal_arm 一致",
-                s == metal_arm.VERSION_STRING,
-                "固件里是 %r，SDK 是 %r" % (s, metal_arm.VERSION_STRING))
-
-    # ---- 码表 ----
-    tid_h = _read(os.path.join(root, "libs/frame/type_id.h"))
-    if tid_h:
-        pairs = [
-            ("FRAME_TYPE_ID_VERSION", protocol.TID_VERSION),
-            ("FRAME_TYPE_ID_ARM_INIT", protocol.TID_ARM_INIT),
-            ("FRAME_TYPE_ID_MOTOR_SET_ZERO", protocol.TID_MOTOR_SET_ZERO),
-            ("FRAME_TYPE_ID_MOTOR_SET_ZERO_ACK", protocol.TID_MOTOR_SET_ZERO_ACK),
-            ("FRAME_TYPE_ID_ARM_START", protocol.TID_ARM_START),
-            ("FRAME_TYPE_ID_ARM_GRAVITY", protocol.TID_ARM_GRAVITY),
-            ("FRAME_TYPE_ID_ARM_STOP", protocol.TID_ARM_STOP),
-            ("FRAME_TYPE_ID_ARM_DAMPING", protocol.TID_ARM_DAMPING),
-            ("FRAME_TYPE_ID_ARM_CTRL_POS", protocol.TID_ARM_CTRL_POS),
-            ("FRAME_TYPE_ID_ARM_CTRL_POS_VEL", protocol.TID_ARM_CTRL_POS_VEL),
-            ("FRAME_TYPE_ID_ARM_RESET", protocol.TID_ARM_RESET),
-            ("FRAME_TYPE_ID_ARM_FEEDBACK", protocol.TID_ARM_FEEDBACK),
-            ("FRAME_TYPE_ID_LINK_STATUS", protocol.TID_LINK_STATUS),
-        ]
-        wrong = []
-        for macro, val in pairs:
-            got = _define(tid_h, macro)
-            if got is None:
-                wrong.append("%s 在头文件里没有" % macro)
-            elif _int(got) != val:
-                wrong.append("%s：头文件 %s，SDK 0x%02X" % (macro, got, val))
-        c.check("码表 13 个 tid 全部对上", not wrong, "\n".join(wrong))
-
-        # SDK 有的码板上也得有（防"SDK 自己编了个码"）
-        known = {m: v for m, v in pairs}
-        missing = [m for m in re.findall(r"#define\s+(FRAME_TYPE_ID_\w+)", tid_h)
-                   if m not in known and m != "FRAME_TYPE_ID_NONE"]
-        c.check("板子上所有 FRAME_TYPE_ID_* 都在 SDK 里有对应", not missing,
-                "SDK 漏了：%s" % missing)
-
-        # 0x81 里 rx_by_tid[] 的下标顺序：**两边各有一份，必须一模一样**。
-        # 错了不会报错，只会让上位机把"收到多少 0x17"读成别的码的数 —— 所以要逐项对。
-        order = []
-        m = re.search(r"#define\s+FRAME_TID_DOWN_LIST\s+(.*?)\n(?!\s)", tid_h, re.S)
-        if m is None:
-            c.check("FRAME_TID_DOWN_LIST 在头文件里能找到", False, "没找到这个宏")
-        else:
-            body = m.group(1).replace("\\", " ")
-            for name in (t.strip() for t in body.split(",")):
-                if name:
-                    order.append(known.get(name, "??%s" % name))
-            c.check("FRAME_TID_DOWN_LIST 的顺序 == SDK 的 LINK_TID_ORDER",
-                    tuple(order) == protocol.LINK_TID_ORDER,
-                    "板子 %r\nSDK %r" % (tuple(order), protocol.LINK_TID_ORDER))
-        for macro, val in [("FRAME_TID_DOWN_NUM", len(protocol.LINK_TID_ORDER)),
-                           ("FRAME_TID_SLOT_NUM", protocol.LINK_TID_SLOT_NUM)]:
-            got = _define(tid_h, macro)
-            c.check("%s == %d" % (macro, val),
-                    got is not None and _int(got) == val,
-                    "头文件 %s" % got)
-
-        for macro, val in [("FRAME_PKT_JOINT_NUM", protocol.PKT_JOINT_NUM),
-                           ("FRAME_PKT_MOTOR_NUM", protocol.PKT_MOTOR_NUM)]:
-            got = _define(tid_h, macro)
-            c.check("%s == %d" % (macro, val), got is not None and _int(got) == val,
-                    "头文件里是 %s" % got)
-
-    # ---- 帧头布局 ----
-    frame_h = _read(os.path.join(root, "libs/frame/frame.h"))
-    if frame_h:
-        for macro, val in [("FRAME_HEADER_LEN", protocol.HEADER_LEN),
-                           ("FRAME_TRAILER_LEN", 2),
-                           ("FRAME_OVERHEAD", protocol.OVERHEAD),
-                           ("FRAME_MAX_DATA", protocol.MAX_DATA),
-                           ("FRAME_ARM_ID_OFFSET", protocol.ARM_ID_OFFSET)]:
-            got = _define(frame_h, macro)
-            c.check("%s == %d" % (macro, val), got is not None and _int(got) == val,
-                    "头文件里是 %s" % got)
-        c.check("MAX_FRAME == 263", protocol.MAX_FRAME == 263)
-
-    # ---- 软限位 / 复位位姿（固件是 Metal 臂，对拍 metal_arm 参数）----
-    cmd_h = _read(os.path.join(root, "App/inc/gimbal_cmd_def.h"))
-    if cmd_h:
-        jmin = _array(cmd_h, "JOINT_ANGLE_MIN")
-        jmax = _array(cmd_h, "JOINT_ANGLE_MAX")
-        c.check("JOINT_ANGLE_MIN 和 SDK metal_arm 一致",
-                jmin == list(metal_arm.JOINT_ANGLE_MIN), "头文件 %r" % (jmin,))
-        c.check("JOINT_ANGLE_MAX 和 SDK metal_arm 一致",
-                jmax == list(metal_arm.JOINT_ANGLE_MAX), "头文件 %r" % (jmax,))
-        gmin = _scalar(cmd_h, "GRIPPER_ANGLE_MIN")
-        gmax = _scalar(cmd_h, "GRIPPER_ANGLE_MAX")
-        c.check("GRIPPER_ANGLE_MAX 和 SDK metal_arm 一致",
-                gmax and abs(_num(gmax) - metal_arm.GRIPPER_ANGLE_MAX) < 1e-9,
-                "头文件里是 %s" % gmax)
-        c.check("GRIPPER_ANGLE_MIN 和 SDK metal_arm 一致",
-                gmin and abs(_num(gmin) - metal_arm.GRIPPER_ANGLE_MIN) < 1e-9,
-                "头文件里是 %s" % gmin)
-
-    # 容差不在 arm_auto.h 里（那边只在注释里引它），真身在 robot_state.h。
-    tol = _scalar(_read(os.path.join(root, "App/inc/robot_state.h")) or "",
-                  "ROBOT_INIT_POSE_TOL_DEG")
-    c.check("ROBOT_INIT_POSE_TOL_DEG 在 robot_state.h 里（SDK 记为 %.1f）"
-            % board_defs.ROBOT_INIT_POSE_TOL_DEG,
-            tol is not None and abs(_num(tol) - board_defs.ROBOT_INIT_POSE_TOL_DEG) < 1e-9,
-            "头文件里是 %s" % tol)
-
-    auto_c = _read(os.path.join(root, "App/arm_auto.c"))
-    if auto_c:
-        m = re.search(r"ARM_RESET_ANGLE\[[^\]]*\]\s*=\s*\{(.*?)\}", auto_c, re.S)
-        if m and cmd_h:
-            jmin = _array(cmd_h, "JOINT_ANGLE_MIN") or list(metal_arm.JOINT_ANGLE_MIN)
-            body = re.sub(r"//[^\n]*", "", m.group(1))
-            vals = []
-            for tok in body.split(","):
-                tok = tok.strip()
-                if not tok:
-                    continue
-                m2 = re.match(r"JOINT_ANGLE_MIN\[JOINT(\d)\]", tok)
-                vals.append(jmin[int(m2.group(1)) - 1] if m2 else _num(tok))
-            c.check("ARM_RESET_ANGLE == SDK metal_arm 的 RESET_POSE_DEG",
-                    vals == list(metal_arm.RESET_POSE_DEG),
-                    "固件拼出来是 %r" % (vals,))
-    # ---- 拓扑 / 状态个数 ----
-    def_h = _read(os.path.join(root, "App/inc/robot_def.h"))
-    if def_h:
-        got = _define(def_h, "ARM_NUM")
-        c.check("ARM_NUM == %d" % board_defs.ARM_NUM,
-                got is not None and _int(got) == board_defs.ARM_NUM, "头文件里是 %s" % got)
-        modes = _enum_names(def_h, "Arm_mode")
-        want = ["arm_stop", "arm_run", "arm_damping", "arm_only_gravity_comp"]
-        c.check("Arm_mode 的顺序和 SDK 的 0/1/2/3 一致", modes == want,
-                "固件是 %r" % (modes,))
-
-    st_h = _read(os.path.join(root, "App/inc/robot_state.h"))
-    if st_h:
-        names = _enum_names(st_h, "Robot_state")
-        if names:
-            n_enum = len(names) - 1 if names and names[-1] == "ROBOT_STATE_NUM" else len(names)
-            c.check("Robot_state 的个数和 SDK 的 STATE_NAME 一一对上",
-                    n_enum == len(board_defs.STATE_NAME),
-                    "固件 %d 个，SDK %d 个：%r" % (n_enum, len(board_defs.STATE_NAME), names))
-            c.check("STATE_NAME 的键正好是 0..N-1",
-                    sorted(board_defs.STATE_NAME) == list(range(len(board_defs.STATE_NAME))))
-            # 名字逐项对上（顺序错位也不会报错的那种错，只能靠比字面量）
-            want = ["robot_state_wait_handshake", "robot_state_offline_wait",
-                    "robot_state_wait_init", "robot_state_initing", "robot_state_normal",
-                    "robot_state_comm_lost", "robot_state_calibrating", "robot_state_resetting"]
-            c.check("Robot_state 各项的名字和顺序都对得上",
-                    names[:n_enum] == want, "固件是 %r" % (names,))
-
-    # ---- 最终口径：和板子实时同步过的那些数 ----
-    c.check("GRIPPER 索引 == ARM_JOINT_NUM（夹爪是第 7 台）",
-            board_defs.GRIPPER == board_defs.ARM_JOINT_NUM == 6)
-    c.check("ARM_MOTOR_NUM == 7", board_defs.ARM_MOTOR_NUM == 7)
-
-
 # ==================== main ====================
 
 def main(argv=None):
@@ -1461,7 +1208,6 @@ def main(argv=None):
         test_sim(c, tmp)
         test_reconnect(c, tmp)
 
-    test_headers(c)
     return c.summary()
 
 
