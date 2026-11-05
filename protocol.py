@@ -107,13 +107,6 @@ def fnv1a32(s):
     return h
 
 
-def parse_version_string(text):
-    """从固件机型配置源码提取 version_string，未找到时返回 None。"""
-    import re
-    m = re.search(r'\.version_string\s*=\s*"([^"]*)"', text)
-    return m.group(1) if m else None
-
-
 # arm_id 的语义：**arm_id 就是 CAN 总线索引**，0 = CAN1 = 臂A、1 = CAN2 = 臂B。
 # 板子只认 arm_id < ARM_NUM(2)，越界的帧**静默丢弃**（连版本包都不回）。
 DEFAULT_ARM_ID = 0
