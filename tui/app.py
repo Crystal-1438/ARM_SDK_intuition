@@ -245,7 +245,7 @@ class Ui:
         if snap["ack"] is not None and self.sess.have_ever_rx:
             ack = snap["ack"]
             self.put(y, 0, i18n.tr("app.setzero_ack",
-                                   i18n.zero_state_name(ack["state"], ack["state"]),
+                                   i18n.zero_state_name(ack["state"]),
                                    ack["elapsed_ms"],
                                    " ".join("%s=%s" % (i18n.axis_name(i),
                                                        i18n.zero_res_name(ack["result"][i]))
