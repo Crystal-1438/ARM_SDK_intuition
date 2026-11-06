@@ -249,7 +249,7 @@ _ZH.update({
         "r / e / h / q      重开串口 / 清事件 / 本帮助 / 退出（任一台正发 0x16 时会二次确认）",
     "app.help.si1":
         "**面板上的单位是 SI**：关节 rad / rad·s⁻¹、夹爪 m（要标定，见 sdk/README「夹爪标定」）；",
-    "app.help.si2": "夹爪没标定时那一行显示的是**电机原始角**（rad），软限位 ∓142°。",
+    "app.help.si2": "夹爪没标定时那一行显示的是**电机原始角**（rad），软限位由所选机型决定。",
     "app.help.si3":
         "事件日志里角度一律写 deg（和固件对得上），和面板上差一个 57.3 —— 不是哪个错了。",
     "app.help.gate1": "状态从反馈帧派生，不自己造：0x16 只在「正常运行 + run + 没暂停」时才发；",
@@ -382,7 +382,7 @@ _ZH.update({
     "selftest.sec_units": "单位与软限位（rad）",
     "selftest.j1_hi": "j1 上限 = 90°",
     "selftest.j1_lo": "j1 下限 = -115°",
-    "selftest.grip_limit": "夹爪软限位 = ∓142°（= ∓284/2）",
+    "selftest.grip_limit": "ARX-X5 夹爪软限位 = -142°～157°",
     "selftest.clamp_hi": "夹到上限 90°",
     "selftest.clamp_lo": "夹到下限 -115°",
     "selftest.clamp_in": "界内不夹、也不报夹过（就是拍板不要那个数）",
@@ -583,7 +583,7 @@ _EN.update({
         "calibration, see sdk/README);",
     "app.help.si2":
         "an uncalibrated gripper row shows the **raw motor angle** (rad), soft "
-        "limits ∓142°.",
+        "limits follow the selected robot profile.",
     "app.help.si3":
         "event-log angles are always deg (they line up with the firmware), 57.3 "
         "away from the panel -- neither one is wrong.",
@@ -748,7 +748,7 @@ _EN.update({
     "selftest.sec_units": "units and soft limits (rad)",
     "selftest.j1_hi": "j1 upper = 90 deg",
     "selftest.j1_lo": "j1 lower = -115 deg",
-    "selftest.grip_limit": "gripper soft limit = -/+142 deg (= -/+284/2)",
+    "selftest.grip_limit": "ARX-X5 gripper soft limit = -142..157 deg",
     "selftest.clamp_hi": "clamped at the 90 deg upper limit",
     "selftest.clamp_lo": "clamped at the -115 deg lower limit",
     "selftest.clamp_in": "inside the range: not clamped, not reported as clamped (that is "
