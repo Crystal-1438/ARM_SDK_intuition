@@ -382,7 +382,7 @@ _ZH.update({
     "selftest.sec_units": "单位与软限位（rad）",
     "selftest.j1_hi": "j1 上限 = 90°",
     "selftest.j1_lo": "j1 下限 = -115°",
-    "selftest.grip_limit": "ARX-X5 夹爪软限位 = -142°～157°",
+    "selftest.grip_limit": "ARX-X5 夹爪软限位 = -157°～142°",
     "selftest.clamp_hi": "夹到上限 90°",
     "selftest.clamp_lo": "夹到下限 -115°",
     "selftest.clamp_in": "界内不夹、也不报夹过（就是拍板不要那个数）",
@@ -748,7 +748,7 @@ _EN.update({
     "selftest.sec_units": "units and soft limits (rad)",
     "selftest.j1_hi": "j1 upper = 90 deg",
     "selftest.j1_lo": "j1 lower = -115 deg",
-    "selftest.grip_limit": "ARX-X5 gripper soft limit = -142..157 deg",
+    "selftest.grip_limit": "ARX-X5 gripper soft limit = -157..142 deg",
     "selftest.clamp_hi": "clamped at the 90 deg upper limit",
     "selftest.clamp_lo": "clamped at the -115 deg lower limit",
     "selftest.clamp_in": "inside the range: not clamped, not reported as clamped (that is "

@@ -66,8 +66,8 @@ def selftest():
     c.check(i18n.tr("selftest.j1_hi"), abs(cb.axis_hi_rad(0) - math.radians(90.0)) < 1e-12)
     c.check(i18n.tr("selftest.j1_lo"), abs(cb.axis_lo_rad(0) - math.radians(-115.0)) < 1e-12)
     c.check(i18n.tr("selftest.grip_limit"),
-            abs(cb.axis_hi_rad(GRIPPER) - math.radians(157.0)) < 1e-12
-            and abs(cb.axis_lo_rad(GRIPPER) + math.radians(142.0)) < 1e-12)
+            abs(cb.axis_hi_rad(GRIPPER) - math.radians(142.0)) < 1e-12
+            and abs(cb.axis_lo_rad(GRIPPER) + math.radians(157.0)) < 1e-12)
     v, cl = cb.clamp_axis_rad(0, math.radians(120.0))
     c.check(i18n.tr("selftest.clamp_hi"), cl and abs(v - math.radians(90.0)) < 1e-12)
     v, cl = cb.clamp_axis_rad(0, math.radians(-120.0))
