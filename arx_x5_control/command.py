@@ -137,6 +137,7 @@ class CommandLayer:
                 self._gripper_finish(True)
                 return
             if self.auto_step == 1:
+                # ARX-X5 正向为张开；找到正向机械限位后再回退设零。
                 self._gripper_step(1)
                 self.gripper_torque = .5
                 g["total_ms"] += elapsed
@@ -145,6 +146,7 @@ class CommandLayer:
                     g["stall_win"] = g["stall_win"] + 1 if abs(fdb - g["win_pos"]) < .5 else 0
                     g["win_pos"], g["win_ms"] = fdb, 0
                 if g["stall_win"] >= 3:
+                    # 回退距离用于建立零点，不随目标软限位变化。
                     g["back_target"] = fdb - 142
                     self.auto_step = 2
                 elif g["total_ms"] >= 10000:

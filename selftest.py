@@ -475,25 +475,25 @@ def test_units(c):
 def test_gripper(c, tmpdir):
     c.section("7. 夹爪两点标定")
 
-    # 找零之后的口径：闭合端 +142、张开端 −142（用户给的两点，方向是"越负越张开"）
+    # ARX-X5 正常方向：负角闭合、正角张开。此处使用测试标定点，不作为设备默认标定。
     calib = gripper.GripperCalibration.from_points(
-        full_open_m=0.085, deg_at_zero=142.0, deg_at_full_open=-141.5)
-    c.check("记录点 A 处 = 0 m", abs(calib.opening_from_raw_deg(142.0)) < 1e-12)
-    c.check("记录点 B 处 = FULL_OPEN", abs(calib.opening_from_raw_deg(-141.5) - 0.085) < 1e-12)
+        full_open_m=0.085, deg_at_zero=-142.0, deg_at_full_open=142.0)
+    c.check("记录点 A 处 = 0 m", abs(calib.opening_from_raw_deg(-142.0)) < 1e-12)
+    c.check("记录点 B 处 = FULL_OPEN", abs(calib.opening_from_raw_deg(142.0) - 0.085) < 1e-12)
     c.check("中点 = 一半行程",
-            abs(calib.opening_from_raw_deg(0.25) - 0.085 / 2) < 1e-9)
+            abs(calib.opening_from_raw_deg(0.0) - 0.085 / 2) < 1e-9)
     c.check("反算 raw deg 往返",
             all(abs(calib.opening_from_raw_deg(calib.raw_deg_from_opening(m)) - m) < 1e-12
                 for m in (0.0, 0.01, 0.0425, 0.085)))
-    c.check("方向识别：越负越张开 → direction=-1", calib.direction == -1)
+    c.check("方向识别：越正越张开 → direction=+1", calib.direction == 1)
     c.check("两点之外是线性外推（不夹住）",
-            calib.opening_from_raw_deg(-142.0) > 0.085)
+            calib.opening_from_raw_deg(143.0) > 0.085)
 
-    # 装反了（越正越张开）也自洽 —— 方向由记录点决定，代码不预设
+    # 反向安装仍由实测两点标定处理。
     flipped = gripper.GripperCalibration.from_points(
-        full_open_m=0.06, deg_at_zero=-142.0, deg_at_full_open=142.0)
-    c.check("装反的夹爪也能标（direction=+1）",
-            flipped.direction == 1 and abs(flipped.opening_from_raw_deg(142.0) - 0.06) < 1e-12)
+        full_open_m=0.06, deg_at_zero=142.0, deg_at_full_open=-142.0)
+    c.check("装反的夹爪也能标（direction=-1）",
+            flipped.direction == -1 and abs(flipped.opening_from_raw_deg(-142.0) - 0.06) < 1e-12)
 
     # 退化标定要拦
     for bad_kw, why in [
@@ -518,7 +518,7 @@ def test_gripper(c, tmpdir):
             "%r / %r" % (store.get(0), store.get(1)))
     c.check("写一台不会覆盖另一台", store.get(1).full_open_m == 0.06)
     c.check("覆盖写同一台也正常",
-            (store.put(0, gripper.GripperCalibration.from_points(0.1, 142.0, -142.0)),
+            (store.put(0, gripper.GripperCalibration.from_points(0.1, -142.0, 142.0)),
              abs(store.get(0).full_open_m - 0.1) < 1e-12)[1])
     c.check("临时文件没留下", not any(n.endswith(".tmp") for n in os.listdir(os.path.dirname(path))))
 
@@ -555,8 +555,8 @@ def test_gripper(c, tmpdir):
     arm.reload_calibration()
     c.check("reload 之后 arm 0 有标定了", arm.calibration == calib)
     lb.inject_feedback(0, robot_state=board_defs.STATE_NORMAL, mode=board_defs.MODE_RUN,
-                       gripper_deg=0.25, inited=0x7F)
-    c.check("标定后 gripper_opening 出数（raw 0.25° → 半个行程）",
+                       gripper_deg=0.0, inited=0x7F)
+    c.check("标定后 gripper_opening 出数（raw 0° → 半个行程）",
             abs(arm.gripper_opening - 0.085 / 2) < 1e-9, "实际 %r" % arm.gripper_opening)
 
     # ---- send_ctrl_pos 的夹爪两条路：m 走标定、raw deg 直给、都不给则保持当前 ----
@@ -567,8 +567,12 @@ def test_gripper(c, tmpdir):
     tid, aid, pay = lb.last_write()
     c.check("gripper_m= 走标定换算成 raw deg",
             tid == TID_ARM_CTRL_POS and aid == 0 and len(pay) == 28
-            and abs(struct.unpack("<7f", pay)[6] - (-141.5)) < 1e-4,
+            and abs(struct.unpack("<7f", pay)[6] - 142.0) < 1e-4,
             "写出的夹爪角 %r" % (struct.unpack("<7f", pay)[6] if len(pay) == 28 else None))
+
+    play.send_ctrl_pos([0.0] * 6, gripper_m=0.0)
+    c.check("闭合开口 0 m 下发负角",
+            abs(struct.unpack("<7f", lb.last_write()[2])[6] - (-142.0)) < 1e-5)
 
     lb.clear()
     play.send_ctrl_pos([0.0] * 6, gripper_raw_deg=-100.0)
