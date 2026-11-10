@@ -38,7 +38,6 @@ class CommandKind(Enum):
     DAMPING = "damping"
     GRAVITY = "gravity"
     POSITION = "position"
-    POSITION_VELOCITY = "position_velocity"
     RESET = "reset"
 
 
@@ -88,17 +87,13 @@ class Command:
     kind: CommandKind
     joint_angle: tuple[float, ...] = ()
     gripper_angle: float = 0.0
-    joint_velocity: tuple[float, ...] = ()
     api_version: int = 1
 
     def __post_init__(self):
         object.__setattr__(self, "kind", CommandKind(self.kind))
-        position = self.kind in (CommandKind.POSITION, CommandKind.POSITION_VELOCITY)
+        position = self.kind == CommandKind.POSITION
         object.__setattr__(self, "joint_angle", finite_tuple(
             self.joint_angle, 6 if position else 0, "joint_angle"))
-        object.__setattr__(self, "joint_velocity", finite_tuple(
-            self.joint_velocity, 6 if self.kind == CommandKind.POSITION_VELOCITY else 0,
-            "joint_velocity"))
         if not isfinite(self.gripper_angle):
             raise ValueError("gripper_angle must be finite")
 

@@ -127,7 +127,7 @@ class Arm:
             else:
                 self.control = None
                 self.mode = MODE_COMMANDS[kind]
-        elif kind in (CommandKind.POSITION, CommandKind.POSITION_VELOCITY):
+        elif kind == CommandKind.POSITION:
             if self.state != RobotState.NORMAL or self.mode != ArmMode.RUN:
                 self.reject(now, command, "requires NORMAL/RUN")
             else:

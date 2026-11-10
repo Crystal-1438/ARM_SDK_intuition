@@ -122,7 +122,6 @@ TID_ARM_GRAVITY = 0x13        # 进重力补偿档 · 下发（空 payload）
 TID_ARM_STOP = 0x14           # 停止（松劲）· 下发（空 payload）
 TID_ARM_DAMPING = 0x15        # 进阻尼档 · 下发（空 payload）
 TID_ARM_CTRL_POS = 0x16       # 位置控制 · 下发
-TID_ARM_CTRL_POS_VEL = 0x17   # 位置 + 速度前馈 · 下发
 TID_ARM_RESET = 0x18          # 一键复位 · 下发（空 payload，不做夹爪找零）
 TID_ARM_FEEDBACK = 0x80       # 机械臂反馈帧 · 上报（握手通过后 250 Hz 常流）
 TID_LINK_STATUS = 0x81        # 链路状态帧 · 上报（握手通过后 10 Hz，链路级只一帧）
@@ -135,9 +134,8 @@ PKT_MOTOR_NUM = 7
 
 FB_LEN = 63                    # 4×u8 + 6f + 6f + f + 7×u8
 CTRL_POS_LEN = 28              # 7f
-CTRL_POS_VEL_LEN = 52          # 13f
 SET_ZERO_ACK_LEN = 12          # u8 + u8[7] + u32
-LINK_STATUS_LEN = 88           # 10×u32 + 12×u32
+LINK_STATUS_LEN = 84           # 10×u32 + 11×u32
 
 # 0x81 里 rx_by_tid[] 的分类顺序：**下标就是它在元组里的位置**，最后一格是「其他」。
 # 顺序的唯一出处是板子 `libs/frame/type_id.h` 的 `FRAME_TID_DOWN_LIST`，自测会逐项比对。
@@ -145,9 +143,9 @@ LINK_STATUS_LEN = 88           # 10×u32 + 12×u32
 LINK_TID_ORDER = (TID_VERSION, TID_ARM_INIT,
                   TID_MOTOR_SET_ZERO, TID_MOTOR_SET_ZERO_ACK,
                   TID_ARM_START, TID_ARM_GRAVITY, TID_ARM_STOP, TID_ARM_DAMPING,
-                  TID_ARM_CTRL_POS, TID_ARM_CTRL_POS_VEL, TID_ARM_RESET)
-LINK_TID_OTHER = len(LINK_TID_ORDER)      # 「其他」那一格的下标（= 11）
-LINK_TID_SLOT_NUM = LINK_TID_OTHER + 1    # 数组长度（= 12）
+                  TID_ARM_CTRL_POS, TID_ARM_RESET)
+LINK_TID_OTHER = len(LINK_TID_ORDER)      # 「其他」那一格的下标（= 10）
+LINK_TID_SLOT_NUM = LINK_TID_OTHER + 1    # 数组长度（= 11）
 
 SYNC = b"\xAA\x55"
 HEADER_LEN = 6                 # 0..5：AA 55 / type / datalen / arm_id / crc8
@@ -184,13 +182,6 @@ def encode_ctrl_pos(angles_deg7):
     return struct.pack("<7f", *angles_deg7)
 
 
-def encode_ctrl_pos_vel(angles_deg6, vels_deg6, gripper_deg):
-    """0x17 的 payload：位置 + 速度前馈（deg、deg/s）+ 夹爪角。"""
-    if len(angles_deg6) != PKT_JOINT_NUM or len(vels_deg6) != PKT_JOINT_NUM:
-        raise ValueError("0x17 的关节角和角速度都要 %d 个" % PKT_JOINT_NUM)
-    return struct.pack("<13f", *angles_deg6, *vels_deg6, gripper_deg)
-
-
 def encode_version(code):
     """0x01 的 payload：4 字节小端版本码，取所选型号的 `board_defs.VERSION_CODE`。
 
@@ -224,15 +215,15 @@ def encode_feedback(mode, robot_state, motor_lost_mask, motor_inited_mask,
 
 def encode_link_status(rx_total, rx_by_tid, crc8_err, crc16_err, drop_bytes,
                        bad_arm, over_len, ring_drop, gated, tx_fail, dt_ms):
-    """0x81 的 payload（88 字节）—— `decode_link_status` 的逆。
+    """0x81 的 payload（84 字节）—— `decode_link_status` 的逆。
 
     和 `encode_feedback` 同一个理由：**0x81 的布局只有一处定义**，模拟板子（`sim.py`）
     和离线自测都拿它组帧，字段一挪两边同时错。
-    `rx_by_tid` 要 `LINK_TID_SLOT_NUM`(12) 个，顺序同 `LINK_TID_ORDER`，最后一格是「其他」。
+    `rx_by_tid` 要 `LINK_TID_SLOT_NUM`(11) 个，顺序同 `LINK_TID_ORDER`，最后一格是「其他」。
     """
     if len(rx_by_tid) != LINK_TID_SLOT_NUM:
         raise ValueError("0x81 的分类计数要 %d 个" % LINK_TID_SLOT_NUM)
-    payload = struct.pack("<22I", rx_total & 0xFFFFFFFF, *rx_by_tid,
+    payload = struct.pack("<%dI" % (10 + LINK_TID_SLOT_NUM), rx_total & 0xFFFFFFFF, *rx_by_tid,
                           crc8_err & 0xFFFFFFFF, crc16_err & 0xFFFFFFFF,
                           drop_bytes & 0xFFFFFFFF, bad_arm & 0xFFFFFFFF,
                           over_len & 0xFFFFFFFF, ring_drop & 0xFFFFFFFF,
@@ -275,17 +266,17 @@ class LinkStatus:
     不能直接相加比较"谁大谁小"，要按窗口看；丢帧只会让某个窗口变小，不会让人看错符号。
     想累计就自己把窗口加总。
 
-    `rx_by_tid` 是 `LINK_TID_SLOT_NUM`(12) 个，下标同 `LINK_TID_ORDER`，最后一格
+    `rx_by_tid` 是 `LINK_TID_SLOT_NUM`(11) 个，下标同 `LINK_TID_ORDER`，最后一格
     （`LINK_TID_OTHER`）是"表外的码"，正常应该是 0。查某个码的收到数：
 
-        n = st.rx_by_tid[protocol.LINK_TID_ORDER.index(protocol.TID_ARM_CTRL_POS_VEL)]
+        n = st.rx_by_tid[protocol.LINK_TID_ORDER.index(protocol.TID_ARM_CTRL_POS)]
 
     `rx_total` 是"解出来的整帧数"，**含**后面那些被丢掉的（闸门挡的、环满丢的都在内）；
     所以 `rx_total` 是板子"收到了多少"，别的字段是"其中怎么了"。
     """
 
     rx_total: int             # 这段窗口里解出来的整帧数
-    rx_by_tid: tuple          # 12 个，顺序同 LINK_TID_ORDER
+    rx_by_tid: tuple          # 11 个，顺序同 LINK_TID_ORDER
     crc8_err: int             # crc8 错被丢的帧数
     crc16_err: int            # crc16 错被丢的帧数
     drop_bytes: int           # 喂进解析器但没能组成任何有效帧的字节数

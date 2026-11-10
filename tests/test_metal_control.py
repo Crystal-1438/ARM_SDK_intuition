@@ -228,13 +228,6 @@ class ControlTests(unittest.TestCase):
         for actual, gravity in zip(arm.dynamics_torque, arm.gravity_torque):
             self.assertAlmostEqual(actual, gravity)
 
-        # Explicit velocity commands have no acceleration field or stale spline acceleration.
-        self.step([Command(0, K.POSITION, (2,-3,4,1,2,-1), 0)])
-        for _ in range(4): self.step()
-        self.assertGreater(max(map(abs, arm.command.acceleration)), 1.)
-        self.step([Command(0, K.POSITION_VELOCITY, target, 0, joint_velocity=(1,2,3,4,5,6))])
-        for _ in range(4): check_requests(self.step())
-        self.assertEqual(arm.command.acceleration, [0.]*6)
         for mode in (K.DAMPING, K.STOP):
             self.step([Command(0, mode)])
             for _ in range(4): self.step()

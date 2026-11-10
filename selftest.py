@@ -35,7 +35,7 @@ from .errors import (CalibrationError, FeedbackStale, GateRejected,
                      GripperNotCalibrated, LinkError, NotConnected)
 from .link import Link, match_ident, same_usb_ident, RECONNECT_MAX_TRIES
 from .protocol import (FB_LEN, LINK_STATUS_LEN, SET_ZERO_ACK_LEN, TID_ARM_CTRL_POS,
-                       TID_ARM_CTRL_POS_VEL, TID_ARM_DAMPING, TID_ARM_FEEDBACK,
+                       TID_ARM_DAMPING, TID_ARM_FEEDBACK,
                        TID_ARM_GRAVITY, TID_ARM_INIT, TID_ARM_RESET, TID_ARM_START,
                        TID_ARM_STOP, TID_LINK_STATUS, TID_MOTOR_SET_ZERO, TID_VERSION)
 
@@ -172,8 +172,8 @@ def test_crc(c):
             "实际 0x%02X" % protocol.crc8(b"123456789"))
     c.check("crc16(\"123456789\") == 0x6F91", protocol.crc16(b"123456789") == 0x6F91,
             "实际 0x%04X" % protocol.crc16(b"123456789"))
-    for name, defs, want in (("arx_x5", board_defs, 0xF81DD236),
-                             ("metal_arm", metal_arm, 0xD8D044AE)):
+    for name, defs, want in (("arx_x5", board_defs, 0xFB1DD6EF),
+                             ("metal_arm", metal_arm, 0xD9D04641)):
         c.check("%s 版本码 == 0x%08X" % (name, want), defs.VERSION_CODE == want,
                 "实际 0x%08X（版本串 %s）" % (defs.VERSION_CODE, defs.VERSION_STRING))
 
@@ -185,10 +185,10 @@ def test_anchors(c):
     cases = [
         ("版本帧 arm_id=0", protocol.encode(
             TID_VERSION, protocol.encode_version(metal_arm.VERSION_CODE), 0),
-         "aa550104008eae44d0d8fea1"),
+         "aa550104008e4146d0d9bc03"),
         ("版本帧 arm_id=1（只差 arm_id 和两个 CRC）",
          protocol.encode(TID_VERSION, protocol.encode_version(metal_arm.VERSION_CODE), 1),
-         "aa55010401d0ae44d0d80fb1"),
+         "aa55010401d04146d0d94d13"),
         ("0x02 空包", protocol.encode(TID_ARM_INIT), "aa5502000051f088"),
         ("0x18 空包", protocol.encode(TID_ARM_RESET), "aa5518000071fdb6"),
     ]
@@ -220,19 +220,6 @@ def test_roundtrip(c):
             ok and all(abs(a - b) < 1e-5 for a, b in zip(vals, angles)),
             "长度 %d / 值 %r" % (len(got[0][2]) if got else -1, vals))
 
-    # 0x17：位置 + 速度前馈
-    vels = [1.0, -2.0, 3.0, 0.0, 0.0, -0.5]
-    ps = protocol.FrameParser()
-    got = ps.feed(protocol.encode(TID_ARM_CTRL_POS_VEL,
-                                  protocol.encode_ctrl_pos_vel(angles[:6], vels, -100.0)))
-    ok = len(got) == 1 and len(got[0][2]) == 52
-    vals = struct.unpack("<13f", got[0][2]) if ok else ()
-    c.check("0x17 往返（52 字节，13 个 float）",
-            ok and all(abs(a - b) < 1e-5 for a, b in zip(vals[:6], angles[:6]))
-            and all(abs(a - b) < 1e-5 for a, b in zip(vals[6:12], vels))
-            and abs(vals[12] - (-100.0)) < 1e-5 if ok else False,
-            "长度 %d / 值 %r" % (len(got[0][2]) if got else -1, vals))
-
     # 0x80：四个 u8 + 6f + 6f + f + 7u8，**按 1 字节对齐读**（uint8 段和 float 段之间没有填充）
     want = dict(mode=1, robot_state=4, lost=0x01, inited=0x7F,
                 joint_deg=[-12.5, 0.5, 30.25, 0.0, -45.5, 119.0],
@@ -260,10 +247,10 @@ def test_roundtrip(c):
             ack.state == 5 and ack.result == (2, 2, 1, 4, 2, 2, 5) and ack.elapsed_ms == 5527,
             "%r" % (ack,))
 
-    # 0x81：22 个 u32（10 + 12 个分类计数），**按 1 字节对齐读**
+    # 0x81：21 个 u32（10 + 11 个分类计数），**按 1 字节对齐读**
     ls_by = tuple(i * 10 for i in range(protocol.LINK_TID_SLOT_NUM))
     ls_pay = protocol.encode_link_status(1234, ls_by, 1, 2, 3, 4, 5, 6, 7, 8, 100)
-    c.check("0x81 payload 恰好 88 字节", len(ls_pay) == LINK_STATUS_LEN,
+    c.check("0x81 payload 恰好 84 字节", len(ls_pay) == LINK_STATUS_LEN,
             "实际 %d" % len(ls_pay))
     ps = protocol.FrameParser()
     got = ps.feed(protocol.encode(TID_LINK_STATUS, ls_pay, 1))
@@ -273,7 +260,7 @@ def test_roundtrip(c):
                                 ls.drop_bytes, ls.bad_arm, ls.over_len, ls.ring_drop,
                                 ls.gated, ls.tx_fail, ls.dt_ms)
             == (1234, ls_by, 1, 2, 3, 4, 5, 6, 7, 8, 100), "%r" % (ls,))
-    # 「其他」必须是最后一格，且 88 字节正好装得下 10 个标量 + 全部分类计数
+    # 「其他」必须是最后一格，且 84 字节正好装得下 10 个标量 + 全部分类计数
     c.check("LINK_TID_OTHER 指向最后一格、槽位数装得下",
             protocol.LINK_TID_OTHER == protocol.LINK_TID_SLOT_NUM - 1
             and len(protocol.LINK_TID_ORDER) + 1 == protocol.LINK_TID_SLOT_NUM
@@ -282,7 +269,7 @@ def test_roundtrip(c):
                                          protocol.LINK_TID_SLOT_NUM, LINK_STATUS_LEN))
 
     # 长度不对必须抛（而不是悄悄解出垃圾）
-    for bad_len in (0, 87, 89):
+    for bad_len in (0, LINK_STATUS_LEN - 1, LINK_STATUS_LEN + 1):
         try:
             protocol.decode_link_status(b"\x00" * bad_len)
             c.check("0x81 长度 %d 要抛 ValueError" % bad_len, False, "没抛")
@@ -677,12 +664,10 @@ def test_gates(c, tmpdir):
                  exc=GateRejected if blocked else None,
                  tid=None if blocked else tid, plen=None if blocked else 0)
 
-    # ---- 0x16 / 0x17 控制帧 ----
+    # ---- 0x16 控制帧 ----
     fb(ST.STATE_NORMAL, ST.MODE_RUN)
     case("send_ctrl_pos 在 正常运行+run：放行（28 字节）",
          lambda: arm.send_ctrl_pos([0.1] * 6), TID_ARM_CTRL_POS, 28)
-    case("send_ctrl_pos_vel 在 正常运行+run：放行（52 字节）",
-         lambda: arm.send_ctrl_pos_vel([0.1] * 6, [0.0] * 6), TID_ARM_CTRL_POS_VEL, 52)
     fb(ST.STATE_NORMAL, ST.MODE_STOP)
     case("send_ctrl_pos 在 mode=stop：挡（板子只要 run 档的控制帧）",
          lambda: arm.send_ctrl_pos([0.1] * 6), exc=GateRejected)

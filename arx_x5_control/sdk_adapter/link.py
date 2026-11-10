@@ -48,9 +48,6 @@ def _command(tid, payload, arm_id):
         if tid == protocol.TID_ARM_CTRL_POS:
             values = struct.unpack("<7f", payload)
             return Command(arm_id, K.POSITION, values[:6], values[6])
-        if tid == protocol.TID_ARM_CTRL_POS_VEL:
-            values = struct.unpack("<13f", payload)
-            return Command(arm_id, K.POSITION_VELOCITY, values[:6], values[12], values[6:12])
         raise ValueError(f"unsupported local command tid: {tid:#x}")
     except (ValueError, struct.error) as exc:
         raise ProtocolError(str(exc)) from exc

@@ -63,8 +63,6 @@ class CommandLayer:
         if arm.initialized[6]:
             self.gripper_angle = clip(self.gripper_angle, GRIPPER_MIN, GRIPPER_MAX)
         planning = self.auto is not None and self.plan is not None and self.plan.running
-        external_velocity = (arm.mode == ArmMode.RUN and arm.control is not None
-                             and bool(arm.control.joint_velocity))
         try:
             for i, td in enumerate(self.td):
                 td.step(solved[i])
@@ -72,8 +70,6 @@ class CommandLayer:
                     td.follow(solved[i])
                     point = Waypoint(solved[i], self.plan.current[i].velocity * PLAN_SPEED_COMP_COEF[i],
                                      self.plan.current[i].acceleration)
-                elif external_velocity:
-                    point = Waypoint(td.position, arm.control.joint_velocity[i])
                 elif arm.mode == ArmMode.RUN:
                     point = self.quintic[i].update(solved[i], arm.joint_angle[i])
                 else:
@@ -82,7 +78,7 @@ class CommandLayer:
                     raise ValueError("nonfinite joint reference")
                 self.angle[i], self.velocity[i] = point.position, point.velocity
                 self.acceleration[i] = point.acceleration if arm.mode == ArmMode.RUN else 0.0
-                if arm.mode != ArmMode.RUN or planning or external_velocity:
+                if arm.mode != ArmMode.RUN or planning:
                     self.quintic[i].follow(Waypoint(arm.joint_angle[i])
                                            if arm.mode != ArmMode.RUN else point)
         except (ValueError, OverflowError):

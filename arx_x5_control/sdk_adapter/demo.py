@@ -46,7 +46,7 @@ def demo():
         while time.monotonic() < deadline:
             link.check_health()
             for arm, target in zip(arms, targets):
-                arm.send_ctrl_pos_vel(target, (0.0,) * 6, gripper_raw_deg=-20.0)
+                arm.send_ctrl_pos(target, gripper_raw_deg=-20.0)
             time.sleep(0.01)
         for arm in arms:
             arm.gravity()

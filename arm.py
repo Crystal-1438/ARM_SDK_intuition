@@ -409,7 +409,7 @@ class Arm:
         """0x12 进 run 档（位控）。控制帧只在 run 档被接受。闸门：state == 正常运行(4)。
 
         切档会**作废上一帧控制指令**（板子侧的 `Ctrl_Invalidate`，防止把切档前的旧目标重新
-        灌进位置环把你猛拽一下），所以切过来之后要重新发 0x16/0x17。
+        灌进位置环把你猛拽一下），所以切过来之后要重新发 0x16。
         """
         return self._mode_cmd(protocol.TID_ARM_START, "start", force)
 
@@ -451,25 +451,8 @@ class Arm:
         `fclip`，但**只对 `motor_inited` 为真的电机生效** —— 没初始化过的电机不受保护，
         而且它是静默夹的，你从期望角上看不出来。
         """
-        return self._ctrl(protocol.TID_ARM_CTRL_POS, joint_rad, None, gripper_m,
-                          gripper_raw_deg, force)
-
-    def send_ctrl_pos_vel(self, joint_rad, joint_vel_rad_s, gripper_m=None, *,
-                          gripper_raw_deg=None, force=False):
-        """0x17 位置 + 速度前馈。角速度单位 **rad/s**（线上是 deg/s）。
-
-        速度前馈的起点建议对齐当前反馈速度（`arm.joint_velocities`），否则从 0 起规划会在
-        起步处顿一下。其余同 `send_ctrl_pos()`。
-        """
-        return self._ctrl(protocol.TID_ARM_CTRL_POS_VEL, joint_rad, joint_vel_rad_s,
-                          gripper_m, gripper_raw_deg, force)
-
-    def _ctrl(self, tid, joint_rad, joint_vel_rad_s, gripper_m, gripper_raw_deg, force):
-        name = "send_ctrl_pos" if tid == protocol.TID_ARM_CTRL_POS else "send_ctrl_pos_vel"
+        name = "send_ctrl_pos"
         angles = units.check_joint_seq(joint_rad, i18n.tr("arm.joint_angle"))
-        vels = (units.check_joint_seq(joint_vel_rad_s, i18n.tr("arm.joint_vel"))
-                if joint_vel_rad_s is not None else None)
-
         if not force:
             fb = self._fresh_feedback(name)
             why = []
@@ -483,11 +466,8 @@ class Arm:
 
         angles_deg = units.rad_seq_to_deg(angles)
         grip_deg = self._gripper_deg_for_send(gripper_m, gripper_raw_deg)
-        if vels is None:
-            return self._send(tid, protocol.encode_ctrl_pos(list(angles_deg) + [grip_deg]))
-        vels_deg = units.rad_s_seq_to_deg_s(vels)
-        return self._send(tid, protocol.encode_ctrl_pos_vel(list(angles_deg), list(vels_deg),
-                                                            grip_deg))
+        return self._send(protocol.TID_ARM_CTRL_POS,
+                          protocol.encode_ctrl_pos(list(angles_deg) + [grip_deg]))
 
     def reset(self, *, force=False):
         """0x18 一键复位：走一段 `ARM_AUTO_RESET_TIME_S` 的轨迹回复位位姿，**不做夹爪找零**，
