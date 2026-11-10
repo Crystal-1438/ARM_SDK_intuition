@@ -340,7 +340,7 @@ ArError
 | `DEFAULT_ARM_ID` = 0 | |
 | `TID_VERSION`(0x01) `TID_ARM_INIT`(0x02) `TID_MOTOR_SET_ZERO`(0x10) `TID_MOTOR_SET_ZERO_ACK`(0x11) `TID_ARM_START`(0x12) `TID_ARM_GRAVITY`(0x13) `TID_ARM_STOP`(0x14) `TID_ARM_DAMPING`(0x15) `TID_ARM_CTRL_POS`(0x16) `TID_ARM_RESET`(0x18) `TID_ARM_FEEDBACK`(0x80) `TID_LINK_STATUS`(0x81) | 码表 |
 | `FEEDBACK` / `SET_ZERO_ACK` 等长度常量 | `FB_LEN`=63、`CTRL_POS_LEN`=28、`SET_ZERO_ACK_LEN`=12、`LINK_STATUS_LEN`=84 |
-| `LINK_TID_ORDER` / `LINK_TID_OTHER` / `LINK_TID_SLOT_NUM` | `0x81` 里 `rx_by_tid` 的分类顺序（11 个下行码）、"其他"那格的下标、数组长度 |
+| `LINK_TID_ORDER` / `LINK_TID_OTHER` / `LINK_TID_SLOT_NUM` | `0x81` 里 `rx_by_tid` 的 10 个帧类型顺序、「其他」槽位下标和数组长度（11） |
 | `HEADER_LEN`=6 / `OVERHEAD`=8 / `ARM_ID_OFFSET`=4 / `MAX_DATA`=255 / `MAX_FRAME`=263 | 帧结构 |
 | `encode(tid, payload=b"", arm_id=0)` | 组一帧（`AA 55 │ tid │ len │ arm_id │ crc8 │ payload │ crc16`） |
 | `encode_version(code)` / `encode_ctrl_pos(angles_deg7)` / `encode_feedback(...)` / `encode_link_status(...)` | 各 payload |
