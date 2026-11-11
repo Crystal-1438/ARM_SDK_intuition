@@ -177,7 +177,7 @@ Arm(arm_id=0, link=None, *, calib_store=None)
 | `stop(*, force=False)` | `0x14` | 同 `start` | STOP / 软停机，不保持位置或重力补偿；电机输出策略见 [行为表](docs/ROBOTS.md#控制行为) |
 | `damping(*, force=False)` | `0x15` | 同 `start` | 阻尼档 |
 | `reset(*, force=False)` | `0x18` | state == 正常运行(4) **且** 7 台全在线（**不检查位姿** —— 位姿偏离时才需要复位） | 走约 2 s 轨迹回复复位位姿，**不做夹爪找零**，完成后停在阻尼 |
-| `send_ctrl_pos(joint_rad, gripper_m=None, *, gripper_raw_deg=None, torque_limit_nm=None, force=False)` | `0x16` | state == 4 **且** mode == run | `joint_rad` 是 6 个关节角（rad） |
+| `send_ctrl_pos(joint_rad, gripper_m=None, *, gripper_raw_deg=None, force=False)` | `0x16` | state == 4 **且** mode == run | `joint_rad` 是 6 个数（rad） |
 | `send_raw(tid, payload=b"")` | 任意 | **无预检、无换算** | 底层 payload 入口；H7 支持透传，PC 仅支持已定义命令。`payload` 不是 `bytes` → `TypeError` |
 
 **夹爪目标三选一**（`gripper_m` / `gripper_raw_deg` 都不给 = **保持当前**）：
@@ -189,16 +189,7 @@ arm.send_ctrl_pos(joints)                        # 保持当前（取最近一�
 ```
 
 两个都给 → `ValueError`；都没给又没收到过反馈 → `FeedbackStale`。
-调用 `arm.board_defs.clamp_axis()` 可在发送前限制角度目标。
-
-`torque_limit_nm` 为 J1 至 J6 和夹爪的七个电机输出轴力矩上限，单位为 N·m。
-每个值必须有限且非负。零表示请求零力矩。
-后端按电机编码量程和该上限限制合计力矩指令。
-省略该参数时，该位置目标使用机型默认控制。
-
-```python
-arm.send_ctrl_pos(joints, torque_limit_nm=(4.0, 5.0, 4.0, 2.0, 2.0, 2.0, 0.5))
-```
+**软限位不在此处限幅**。需要限幅时由调用方调用 `arm.board_defs.clamp_axis()`（第 6 节）。
 
 **公共异常**：`FeedbackStale`（没有反馈或反馈过旧，无法判断闸门）、`GateRejected`
 （预检不通过，**帧未发出**）、`ValueError` / `TypeError`（参数本身不合法）、`LinkError`

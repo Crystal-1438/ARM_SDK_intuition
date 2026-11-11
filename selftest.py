@@ -172,8 +172,8 @@ def test_crc(c):
             "实际 0x%02X" % protocol.crc8(b"123456789"))
     c.check("crc16(\"123456789\") == 0x6F91", protocol.crc16(b"123456789") == 0x6F91,
             "实际 0x%04X" % protocol.crc16(b"123456789"))
-    for name, defs, want in (("arx_x5", board_defs, 0xFA1DD55C),
-                             ("metal_arm", metal_arm, 0xD6D04188)):
+    for name, defs, want in (("arx_x5", board_defs, 0xFB1DD6EF),
+                             ("metal_arm", metal_arm, 0xD9D04641)):
         c.check("%s 版本码 == 0x%08X" % (name, want), defs.VERSION_CODE == want,
                 "实际 0x%08X（版本串 %s）" % (defs.VERSION_CODE, defs.VERSION_STRING))
 
@@ -185,10 +185,10 @@ def test_anchors(c):
     cases = [
         ("版本帧 arm_id=0", protocol.encode(
             TID_VERSION, protocol.encode_version(metal_arm.VERSION_CODE), 0),
-         "aa550104008e8841d0d6f4b5"),
+         "aa550104008e4146d0d9bc03"),
         ("版本帧 arm_id=1（只差 arm_id 和两个 CRC）",
          protocol.encode(TID_VERSION, protocol.encode_version(metal_arm.VERSION_CODE), 1),
-         "aa55010401d08841d0d605a5"),
+         "aa55010401d04146d0d94d13"),
         ("0x02 空包", protocol.encode(TID_ARM_INIT), "aa5502000051f088"),
         ("0x18 空包", protocol.encode(TID_ARM_RESET), "aa5518000071fdb6"),
     ]
@@ -219,13 +219,6 @@ def test_roundtrip(c):
     c.check("0x16 往返（28 字节，7 个 float）",
             ok and all(abs(a - b) < 1e-5 for a, b in zip(vals, angles)),
             "长度 %d / 值 %r" % (len(got[0][2]) if got else -1, vals))
-    limits = (0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 0.5)
-    frame = protocol.encode(TID_ARM_CTRL_POS, protocol.encode_ctrl_pos(angles, limits), 1)
-    got = protocol.FrameParser().feed(frame)
-    c.check("0x16 往返（56 字节，含力矩软限位）",
-            len(frame) == 64 and got and got[0][:2] == (TID_ARM_CTRL_POS, 1)
-            and protocol.decode_ctrl_pos(got[0][2]) == (tuple(angles), limits),
-            "解析结果 %r" % (got,))
 
     # 0x80：四个 u8 + 6f + 6f + f + 7u8，**按 1 字节对齐读**（uint8 段和 float 段之间没有填充）
     want = dict(mode=1, robot_state=4, lost=0x01, inited=0x7F,

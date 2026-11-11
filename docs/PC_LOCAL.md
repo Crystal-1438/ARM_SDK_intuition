@@ -65,7 +65,7 @@ class MyMotorIO:
 | `init_arm()` | `INITIALIZE`，保留位姿、在线和状态门槛 |
 | `set_zero()` | `CALIBRATE`，完成事件转换为 `sdk.SetZeroAck` |
 | `start()` / `stop()` / `damping()` / `gravity()` | 对应模式命令 |
-| `send_ctrl_pos()` | `POSITION`，包含角度目标和可选电机力矩软限位 |
+| `send_ctrl_pos()` | `POSITION`，关节 rad 转 deg，保留夹爪标定换算 |
 | `reset()` | `RESET`，执行复位轨迹 |
 | `feedback`、`snapshot()`、`wait_feedback()`、`wait_for()` | 从对应臂的 SDK 通道读取控制核心反馈 |
 | `last_setzero_ack`、`wait_setzero_ack()` | 读取该臂本轮设零的状态、7 个电机结果及耗时 |

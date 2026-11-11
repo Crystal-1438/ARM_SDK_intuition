@@ -19,7 +19,6 @@ crc16 盖偏移 0..(5+N)。**全部小端。**
 
 import struct
 from dataclasses import dataclass
-from math import isfinite
 
 # ==================== CRC ====================
 #
@@ -135,7 +134,6 @@ PKT_MOTOR_NUM = 7
 
 FB_LEN = 63                    # 4×u8 + 6f + 6f + f + 7×u8
 CTRL_POS_LEN = 28              # 7f
-CTRL_POS_LIMITED_LEN = 56      # 7f + 7f
 SET_ZERO_ACK_LEN = 12          # u8 + u8[7] + u32
 LINK_STATUS_LEN = 84           # 10×u32 + 11×u32
 
@@ -177,36 +175,11 @@ def encode(tid, payload=b"", arm_id=DEFAULT_ARM_ID):
     return body + bytes((c & 0xFF, (c >> 8) & 0xFF))
 
 
-def _torque_limits(values):
-    limits = tuple(float(value) for value in values)
-    if len(limits) != PKT_MOTOR_NUM or any(not isfinite(value) or value < 0 for value in limits):
-        raise ValueError("力矩软限位必须包含 7 个有限非负值（N·m）")
-    return limits
-
-
-def encode_ctrl_pos(angles_deg7, torque_limit_nm=None):
-    """编码 0x16 的位置目标和可选电机力矩软限位。"""
+def encode_ctrl_pos(angles_deg7):
+    """0x16 的 payload：6 个关节角 + 夹爪角，float32 LE，deg。"""
     if len(angles_deg7) != PKT_JOINT_NUM + 1:
         raise ValueError("0x16 要 %d 个角度，收到 %d" % (PKT_JOINT_NUM + 1, len(angles_deg7)))
-    angles = struct.pack("<7f", *angles_deg7)
-    if torque_limit_nm is None:
-        return angles
-    try:
-        return angles + struct.pack("<7f", *_torque_limits(torque_limit_nm))
-    except OverflowError as exc:
-        raise ValueError("力矩软限位超出 float32 范围") from exc
-
-
-def decode_ctrl_pos(payload):
-    """读取 0x16 的位置目标和可选电机力矩软限位。"""
-    if len(payload) not in (CTRL_POS_LEN, CTRL_POS_LIMITED_LEN):
-        raise ValueError("0x16 载荷长度必须为 28 或 56 字节")
-    angles = struct.unpack_from("<7f", payload)
-    if not all(isfinite(value) for value in angles):
-        raise ValueError("0x16 位置目标必须为有限值")
-    limits = (_torque_limits(struct.unpack_from("<7f", payload, CTRL_POS_LEN))
-              if len(payload) == CTRL_POS_LIMITED_LEN else None)
-    return angles, limits
+    return struct.pack("<7f", *angles_deg7)
 
 
 def encode_version(code):

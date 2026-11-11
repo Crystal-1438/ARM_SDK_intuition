@@ -222,12 +222,8 @@ class Arm:
                 self.dynamics_status = error.status
                 self.actual_mode = ArmMode.STOP
                 self.event(now, "dynamics_error", error.status.name)
-        limits = (self.control.torque_limit_nm
-                  if self.state == RobotState.NORMAL and self.actual_mode == ArmMode.RUN
-                  and self.control is not None else None)
         for i, motor in enumerate(self.bank.motors):
             motor.mode = self.actual_mode
-            motor.torque_limit_nm = None if limits is None else limits[i]
             if self.actual_mode != ArmMode.RUN:
                 motor.reference_deg = motor.position_deg
                 motor.speed_comp = motor.output_comp = 0.0

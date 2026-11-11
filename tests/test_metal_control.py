@@ -31,22 +31,6 @@ def feedback_frame(i, p=0, v=0, t=0, status=1):
 
 
 class ProtocolTests(unittest.TestCase):
-    def test_position_frame_with_torque_limits(self):
-        angles = (0, 1, 2, 3, 4, 5, 6)
-        limits = (0, 1, 2, 3, 4, 5, 0.5)
-        plain = sdk.protocol.encode_ctrl_pos(angles)
-        limited = sdk.protocol.encode_ctrl_pos(angles, limits)
-        self.assertEqual(len(plain), 28)
-        self.assertEqual(len(limited), 56)
-        self.assertEqual(limited[:28], plain)
-        self.assertEqual(sdk.protocol.decode_ctrl_pos(plain), (angles, None))
-        self.assertEqual(sdk.protocol.decode_ctrl_pos(limited), (angles, limits))
-        for invalid in ((1,) * 6, (-1,) * 7, (float("nan"),) * 7, (1e39,) * 7):
-            with self.subTest(limits=invalid), self.assertRaises(ValueError):
-                sdk.protocol.encode_ctrl_pos(angles, invalid)
-        with self.assertRaises(ValueError):
-            sdk.protocol.decode_ctrl_pos(limited[:-1])
-
     def test_special_commands_all_seven_motors(self):
         for i in range(7):
             for action, tail in ((A.ENABLE, 0xfc), (A.DISABLE, 0xfd), (A.SAVE_ZERO, 0xfe)):
@@ -372,24 +356,8 @@ class SDKTests(unittest.TestCase):
             self.assertAlmostEqual(arm.gripper_opening,0.05,delta=0.002)
             self.assertIs(arm.board_defs,link.board_defs)
             self.assertNotEqual(arm.board_defs.JOINT_ANGLE_MIN_RAD,sdk.board_defs.arx_x5.JOINT_ANGLE_MIN_RAD)
-            limits = (0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 0.25)
-            arm.send_ctrl_pos((0.5, -0.2, 0.2, 0, 0, 0), gripper_m=0.05, torque_limit_nm=limits)
-            commanded = set()
-            for now in range(2600, 2620):
-                result = link.step(now)
-                for request in result.motor_requests:
-                    if request.action == A.CONTROL:
-                        self.assertEqual((request.kp, request.kd), (0.0, 0.0))
-                        self.assertLessEqual(abs(request.torque), limits[request.motor_index])
-                        commanded.add(request.motor_index)
-            self.assertEqual(commanded, set(range(7)))
-            arm.send_ctrl_pos((0.5, -0.2, 0.2, 0, 0, 0), gripper_m=0.05)
-            regular_control = []
-            for now in range(2620, 2640):
-                regular_control.extend(r for r in link.step(now).motor_requests if r.action == A.CONTROL)
-            self.assertTrue(any(r.kp > 0 for r in regular_control))
             arm.stop()
-            for now in range(2640,2650): link.step(now)
+            for now in range(2600,2610): link.step(now)
             self.assertEqual(arm.mode,link.board_defs.MODE_STOP)
 
     def test_factory_gripper_table(self):
