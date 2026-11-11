@@ -177,19 +177,24 @@ Arm(arm_id=0, link=None, *, calib_store=None)
 | `stop(*, force=False)` | `0x14` | 同 `start` | STOP / 软停机，不保持位置或重力补偿；电机输出策略见 [行为表](docs/ROBOTS.md#控制行为) |
 | `damping(*, force=False)` | `0x15` | 同 `start` | 阻尼档 |
 | `reset(*, force=False)` | `0x18` | state == 正常运行(4) **且** 7 台全在线（**不检查位姿** —— 位姿偏离时才需要复位） | 走约 2 s 轨迹回复复位位姿，**不做夹爪找零**，完成后停在阻尼 |
-| `send_ctrl_pos(joint_rad, gripper_m=None, *, gripper_raw_deg=None, force=False)` | `0x16` | state == 4 **且** mode == run | `joint_rad` 是 6 个数（rad） |
+| `send_ctrl_pos(joint_rad, gripper_m=None, *, gripper_torque_limit_nm, gripper_raw_deg=None, force=False)` | `0x16` | state == 4 **且** mode == run | 六个关节角（rad）及夹爪力矩上限（N·m） |
 | `send_raw(tid, payload=b"")` | 任意 | **无预检、无换算** | 底层 payload 入口；H7 支持透传，PC 仅支持已定义命令。`payload` 不是 `bytes` → `TypeError` |
 
 **夹爪目标三选一**（`gripper_m` / `gripper_raw_deg` 都不给 = **保持当前**）：
 
 ```python
-arm.send_ctrl_pos(joints, gripper_m=0.03)        # 使用当前换算模型：文件标定或厂家查表
-arm.send_ctrl_pos(joints, gripper_raw_deg=arm.raw_gripper_angle_deg)  # 直接给原始电机角（不需要标定）
-arm.send_ctrl_pos(joints)                        # 保持当前（取最近一帧反馈里的原始角）
+arm.send_ctrl_pos(joints, gripper_m=0.03, gripper_torque_limit_nm=0.5)
+arm.send_ctrl_pos(joints, gripper_raw_deg=arm.raw_gripper_angle_deg, gripper_torque_limit_nm=0.5)
+arm.send_ctrl_pos(joints, gripper_torque_limit_nm=0.5)
 ```
 
 两个都给 → `ValueError`；都没给又没收到过反馈 → `FeedbackStale`。
-**软限位不在此处限幅**。需要限幅时由调用方调用 `arm.board_defs.clamp_axis()`（第 6 节）。
+调用 `arm.board_defs.clamp_axis()` 可在发送前限制角度目标。
+
+每次调用都必须显式传入 `gripper_torque_limit_nm`。
+该值是夹爪电机输出轴的力矩上限，单位为 N·m。
+该值必须有限且非负。零表示请求零夹爪力矩。
+后端对夹爪合计力矩指令执行双向限幅。
 
 **公共异常**：`FeedbackStale`（没有反馈或反馈过旧，无法判断闸门）、`GateRejected`
 （预检不通过，**帧未发出**）、`ValueError` / `TypeError`（参数本身不合法）、`LinkError`
@@ -339,11 +344,11 @@ ArError
 |---|---|
 | `DEFAULT_ARM_ID` = 0 | |
 | `TID_VERSION`(0x01) `TID_ARM_INIT`(0x02) `TID_MOTOR_SET_ZERO`(0x10) `TID_MOTOR_SET_ZERO_ACK`(0x11) `TID_ARM_START`(0x12) `TID_ARM_GRAVITY`(0x13) `TID_ARM_STOP`(0x14) `TID_ARM_DAMPING`(0x15) `TID_ARM_CTRL_POS`(0x16) `TID_ARM_RESET`(0x18) `TID_ARM_FEEDBACK`(0x80) `TID_LINK_STATUS`(0x81) | 码表 |
-| `FEEDBACK` / `SET_ZERO_ACK` 等长度常量 | `FB_LEN`=63、`CTRL_POS_LEN`=28、`SET_ZERO_ACK_LEN`=12、`LINK_STATUS_LEN`=84 |
+| `FEEDBACK` / `SET_ZERO_ACK` 等长度常量 | `FB_LEN`=63、`CTRL_POS_LEN`=32、`SET_ZERO_ACK_LEN`=12、`LINK_STATUS_LEN`=84 |
 | `LINK_TID_ORDER` / `LINK_TID_OTHER` / `LINK_TID_SLOT_NUM` | `0x81` 里 `rx_by_tid` 的 10 个帧类型顺序、「其他」槽位下标和数组长度（11） |
 | `HEADER_LEN`=6 / `OVERHEAD`=8 / `ARM_ID_OFFSET`=4 / `MAX_DATA`=255 / `MAX_FRAME`=263 | 帧结构 |
 | `encode(tid, payload=b"", arm_id=0)` | 组一帧（`AA 55 │ tid │ len │ arm_id │ crc8 │ payload │ crc16`） |
-| `encode_version(code)` / `encode_ctrl_pos(angles_deg7)` / `encode_feedback(...)` / `encode_link_status(...)` | 各 payload |
+| `encode_version(code)` / `encode_ctrl_pos(angles_deg7, gripper_torque_limit_nm)` / `encode_feedback(...)` / `encode_link_status(...)` | 各 payload |
 | `decode_feedback(payload)` / `decode_setzero_ack(payload)` / `decode_version(payload)` / `decode_link_status(payload)` | → `Feedback` / `SetZeroAck` / 版本码 / `LinkStatus`。长度不符抛 `ValueError`（由 `link` 静默丢弃） |
 | `crc8(data)` / `crc16(data)` / `fnv1a32(s)` | CRC-8/MAXIM、反射多项式 `0x8408`、版本码用的 FNV-1a 32 |
 | `FrameParser` | 字节流 → 帧。`feed(chunk)` 吐 `(type_id, arm_id, payload)`；粘包 / 前导噪声 / 半帧 / 坏 CRC 都能重同步。统计 `n_ok` / `n_err_crc8` / `n_err_crc16` / `n_drop` |

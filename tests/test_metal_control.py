@@ -31,6 +31,20 @@ def feedback_frame(i, p=0, v=0, t=0, status=1):
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_position_frame_requires_gripper_torque_limit(self):
+        angles = (0, 1, 2, 3, 4, 5, 6)
+        with self.assertRaises(TypeError):
+            sdk.protocol.encode_ctrl_pos(angles)
+        for limit in (0, 0.5):
+            payload = sdk.protocol.encode_ctrl_pos(angles, limit)
+            self.assertEqual(len(payload), 32)
+            self.assertEqual(sdk.protocol.decode_ctrl_pos(payload), (angles, limit))
+        for limit in (-1, float("nan"), float("inf"), 1e40):
+            with self.subTest(limit=limit), self.assertRaises(ValueError):
+                sdk.protocol.encode_ctrl_pos(angles, limit)
+        with self.assertRaises(ValueError):
+            sdk.protocol.decode_ctrl_pos(payload[:28])
+
     def test_special_commands_all_seven_motors(self):
         for i in range(7):
             for action, tail in ((A.ENABLE, 0xfc), (A.DISABLE, 0xfd), (A.SAVE_ZERO, 0xfe)):
@@ -350,8 +364,19 @@ class SDKTests(unittest.TestCase):
             self.assertEqual(arm.robot_state,link.board_defs.STATE_NORMAL)
             arm.start()
             for now in range(2210,2220): link.step(now)
-            arm.send_ctrl_pos((0,-0.2,0.2,0,0,0),gripper_m=0.05)
-            for now in range(2220,2600): link.step(now)
+            with self.assertRaises(TypeError):
+                arm.send_ctrl_pos((0,-0.2,0.2,0,0,0),gripper_m=0.05)
+            arm.send_ctrl_pos((0,-0.2,0.2,0,0,0),gripper_m=0.05,gripper_torque_limit_nm=5)
+            controls = {}
+            for now in range(2220,2600):
+                for request in link.step(now).motor_requests:
+                    if request.action == A.CONTROL:
+                        controls[request.motor_index] = request
+                        if request.motor_index == 6:
+                            self.assertEqual((request.kp, request.kd), (0.0, 0.0))
+                            self.assertLessEqual(abs(request.torque), 5.0)
+            self.assertEqual(set(controls), set(range(7)))
+            self.assertGreater(controls[1].kp, 0.0)
             self.assertAlmostEqual(arm.joint_angles[1],-0.2,delta=0.02)
             self.assertAlmostEqual(arm.gripper_opening,0.05,delta=0.002)
             self.assertIs(arm.board_defs,link.board_defs)

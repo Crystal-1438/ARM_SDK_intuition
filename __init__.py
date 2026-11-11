@@ -41,7 +41,7 @@
     arm.wait_for(lambda a: a.mode == a.board_defs.MODE_RUN)   # 等反馈确认切档，
                                         # 否则紧接着发的第一帧控制帧会被闸门挡下
     while True:
-        arm.send_ctrl_pos(arm.joint_angles, gripper_m=0.0)   # 照抄现在的位置、夹爪闭合
+        arm.send_ctrl_pos(arm.joint_angles, gripper_m=0.0, gripper_torque_limit_nm=0.5)
         time.sleep(0.01)                # 这一帧本身就是保活；停发就要自己 arm.keepalive()
 
 两台臂（**一条链路、两个 Arm** —— 板子只有一条上位机链路）：

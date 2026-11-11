@@ -1,8 +1,7 @@
 """`Arm` —— 单台机械臂的门面对象。**这是 SDK 的主入口。**
 
 对外单位统一到 SI：关节角 rad、关节角速度 rad/s、夹爪开口 **m**（要过标定）、温度 ℃。
-控制量和反馈量是同一把尺子 —— `send_ctrl_pos(arm.joint_angles)` 这种"照抄现在的位置"是
-合法的，不用手算量纲。
+控制量和反馈量使用同一单位。向 `send_ctrl_pos()` 传入 `arm.joint_angles` 可以保持关节角度。
 
 ## 两台臂怎么用
 
@@ -436,9 +435,9 @@ class Arm:
             self._raise_if(why, name)
         return self._send(tid)
 
-    def send_ctrl_pos(self, joint_rad, gripper_m=None, *, gripper_raw_deg=None,
+    def send_ctrl_pos(self, joint_rad, gripper_m=None, *, gripper_torque_limit_nm, gripper_raw_deg=None,
                       force=False):
-        """0x16 位置指令。`joint_rad` 是 6 个关节角（**rad**）。
+        """发送 0x16 位置指令。关节角使用 rad，夹爪力矩上限使用 N·m。
 
         夹爪目标三选一：
           - `gripper_m=0.03`        按标定换算成原始角（要先标定）
@@ -447,9 +446,8 @@ class Arm:
 
         闸门：state == 正常运行(4) **且** mode == run(1) + 遥控器离线。
 
-        ⚠ **软限位不在这里夹**（`self.board_defs.clamp_axis()` 给你自己夹）。板子那边确实会
-        `fclip`，但**只对 `motor_inited` 为真的电机生效** —— 没初始化过的电机不受保护，
-        而且它是静默夹的，你从期望角上看不出来。
+        `gripper_torque_limit_nm` 必须为有限非负数。零表示请求零夹爪力矩。
+        板子按机型配置限制已初始化电机的角度。
         """
         name = "send_ctrl_pos"
         angles = units.check_joint_seq(joint_rad, i18n.tr("arm.joint_angle"))
@@ -467,7 +465,7 @@ class Arm:
         angles_deg = units.rad_seq_to_deg(angles)
         grip_deg = self._gripper_deg_for_send(gripper_m, gripper_raw_deg)
         return self._send(protocol.TID_ARM_CTRL_POS,
-                          protocol.encode_ctrl_pos(list(angles_deg) + [grip_deg]))
+                          protocol.encode_ctrl_pos(list(angles_deg) + [grip_deg], gripper_torque_limit_nm))
 
     def reset(self, *, force=False):
         """0x18 一键复位：走一段 `ARM_AUTO_RESET_TIME_S` 的轨迹回复位位姿，**不做夹爪找零**，

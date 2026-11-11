@@ -24,6 +24,7 @@ PC 双臂在命令末尾增加 `--channel can1`；通道顺序对应臂 0、臂 
 5. 放稳或支撑机械臂，按 `q` 退出。设备输出的退出行为见 [后端生命周期](BACKENDS.md#生命周期与诊断差异)。
 
 初始化内部动作由型号和后端决定，见 [控制行为表](ROBOTS.md#控制行为)。界面中的限位、复位参考和夹爪换算读取链路配置。
+TUI 在每帧位置指令中发送机型的夹爪力矩编码上限。ARX-X5 使用 10 N·m，MetalArm 使用 20 N·m。
 
 ## 公共按键
 
@@ -62,7 +63,7 @@ TUI 为每台臂发送目标或保活，切换显示臂不会停止另一台臂�
 
 | 标识 | 来源 | 含义 |
 | --- | --- | --- |
-| `vcode 0xXXXXXXXX` | 所选型号的 `board_defs.VERSION_CODE`：`arx_x5` 为 `0xFB1DD6EF`，`metal_arm` 为 `0xD9D04641` | 握手用的协议版本码，随 `--robot-type` 变化 |
+| `vcode 0xXXXXXXXX` | 所选型号的 `board_defs.VERSION_CODE`：`arx_x5` 为 `0xFA1DD55C`，`metal_arm` 为 `0xD6D04188` | 握手用的协议版本码，随 `--robot-type` 变化 |
 | `board_version` | H7 版本帧；PC 本地适配层填入协议码 | 握手协议版本 |
 | `package_version` | `arx-x5-control` 安装元数据，当前 `0.6.0` | 发行包版本 |
 | 源码提交 | `git rev-parse --short HEAD` | 当前源码版本 |

@@ -88,6 +88,7 @@ class Command:
     joint_angle: tuple[float, ...] = ()
     gripper_angle: float = 0.0
     api_version: int = 1
+    gripper_torque_limit_nm: float | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "kind", CommandKind(self.kind))
@@ -96,6 +97,11 @@ class Command:
             self.joint_angle, 6 if position else 0, "joint_angle"))
         if not isfinite(self.gripper_angle):
             raise ValueError("gripper_angle must be finite")
+        if self.gripper_torque_limit_nm is not None:
+            limit = float(self.gripper_torque_limit_nm)
+            if not position or not isfinite(limit) or limit < 0:
+                raise ValueError("夹爪力矩上限仅用于位置指令，且必须为有限非负数")
+            object.__setattr__(self, "gripper_torque_limit_nm", limit)
 
 
 @dataclass(frozen=True)

@@ -46,8 +46,8 @@ def _command(tid, payload, arm_id):
                 raise ValueError("this command requires an empty payload")
             return Command(arm_id, _EMPTY_COMMANDS[tid])
         if tid == protocol.TID_ARM_CTRL_POS:
-            values = struct.unpack("<7f", payload)
-            return Command(arm_id, K.POSITION, values[:6], values[6])
+            angles, limit = protocol.decode_ctrl_pos(payload)
+            return Command(arm_id, K.POSITION, angles[:6], angles[6], gripper_torque_limit_nm=limit)
         raise ValueError(f"unsupported local command tid: {tid:#x}")
     except (ValueError, struct.error) as exc:
         raise ProtocolError(str(exc)) from exc

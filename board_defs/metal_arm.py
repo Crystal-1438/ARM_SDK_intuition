@@ -8,13 +8,14 @@ from ..protocol import fnv1a32
 from .common import *  # Shared protocol names are also part of each robot profile.
 
 # 版本串与固件 App/profiles/metal.c 一致；版本码为 FNV-1a 32 位哈希。
-VERSION_STRING = "Intuition-Metal-Arm-v0.5"
+VERSION_STRING = "Intuition-Metal-Arm-v0.6"
 VERSION_CODE = fnv1a32(VERSION_STRING)
 
 JOINT_ANGLE_MIN = (-160.0, -180.0, 0.0, -123.0, -85.0, -145.0)
 JOINT_ANGLE_MAX = (160.0, 4.8, 180.0, 81.0, 85.0, 145.0)
 GRIPPER_ANGLE_MIN = 0.0
 GRIPPER_ANGLE_MAX = math.degrees(2.4)
+GRIPPER_TORQUE_MAX_NM = 20.0
 GRIPPER_STROKE_DEG = GRIPPER_ANGLE_MAX - GRIPPER_ANGLE_MIN
 AXIS_MIN = JOINT_ANGLE_MIN + (GRIPPER_ANGLE_MIN,)
 AXIS_MAX = JOINT_ANGLE_MAX + (GRIPPER_ANGLE_MAX,)

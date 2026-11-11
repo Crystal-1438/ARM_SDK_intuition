@@ -19,6 +19,7 @@ crc16 盖偏移 0..(5+N)。**全部小端。**
 
 import struct
 from dataclasses import dataclass
+from math import isfinite
 
 # ==================== CRC ====================
 #
@@ -133,7 +134,7 @@ PKT_JOINT_NUM = 6
 PKT_MOTOR_NUM = 7
 
 FB_LEN = 63                    # 4×u8 + 6f + 6f + f + 7×u8
-CTRL_POS_LEN = 28              # 7f
+CTRL_POS_LEN = 32              # 7 个角度和 1 个夹爪力矩上限
 SET_ZERO_ACK_LEN = 12          # u8 + u8[7] + u32
 LINK_STATUS_LEN = 84           # 10×u32 + 11×u32
 
@@ -175,11 +176,27 @@ def encode(tid, payload=b"", arm_id=DEFAULT_ARM_ID):
     return body + bytes((c & 0xFF, (c >> 8) & 0xFF))
 
 
-def encode_ctrl_pos(angles_deg7):
-    """0x16 的 payload：6 个关节角 + 夹爪角，float32 LE，deg。"""
+def encode_ctrl_pos(angles_deg7, gripper_torque_limit_nm):
+    """编码 0x16 的角度目标和夹爪力矩上限。"""
     if len(angles_deg7) != PKT_JOINT_NUM + 1:
         raise ValueError("0x16 要 %d 个角度，收到 %d" % (PKT_JOINT_NUM + 1, len(angles_deg7)))
-    return struct.pack("<7f", *angles_deg7)
+    limit = float(gripper_torque_limit_nm)
+    if not isfinite(limit) or limit < 0:
+        raise ValueError("夹爪力矩上限必须为有限非负数")
+    try:
+        return struct.pack("<8f", *angles_deg7, limit)
+    except OverflowError as exc:
+        raise ValueError("位置控制字段超出 float32 范围") from exc
+
+
+def decode_ctrl_pos(payload):
+    """读取 0x16 的七个角度目标和夹爪力矩上限。"""
+    if len(payload) != CTRL_POS_LEN:
+        raise ValueError("0x16 载荷必须为 32 字节")
+    values = struct.unpack("<8f", payload)
+    if not all(isfinite(value) for value in values) or values[-1] < 0:
+        raise ValueError("角度和夹爪力矩上限必须有限，且夹爪力矩上限必须非负")
+    return values[:-1], values[-1]
 
 
 def encode_version(code):

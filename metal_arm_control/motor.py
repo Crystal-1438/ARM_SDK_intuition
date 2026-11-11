@@ -1,7 +1,7 @@
 """Motor control policy, feedback freshness and semantic requests (no CAN)."""
 
 from dataclasses import dataclass, field
-from math import degrees, radians
+from math import degrees, isfinite, radians
 
 from .config import (MOTOR_IDS, MOTOR_KP, MOTOR_KD, POSITION_PID, SPEED_PID,
                      TX_GROUPS, ZERO_PID, MOTOR_PMAX, MOTOR_VMAX, MOTOR_TMAX,
@@ -35,6 +35,7 @@ class Motor:
     output_comp: float = 0.0
     reference_velocity_deg: float = 0.0
     mode: ArmMode = ArmMode.STOP
+    torque_limit_nm: float | None = None
     position_pid: PID = field(init=False)
     speed_pid: PID = field(init=False)
 
@@ -110,9 +111,16 @@ class Motor:
             kp = kd = 0.0
         position = radians(self.reference_deg)
         speed_limit, torque_limit = MOTOR_VMAX[self.index], MOTOR_TMAX[self.index]
+        position = clip(position, -MOTOR_PMAX[self.index], MOTOR_PMAX[self.index])
+        velocity = clip(radians(self.reference_velocity_deg), -speed_limit, speed_limit)
+        if self.index == 6 and self.torque_limit_nm is not None:
+            torque += kp * (position - self.position) + kd * (velocity - self.velocity)
+            if not isfinite(torque):
+                torque = 0.0
+            torque_limit = min(torque_limit, self.torque_limit_nm)
+            kp = kd = 0.0
         return self.request(MotorAction.CONTROL, now,
-                            position=clip(position, -MOTOR_PMAX[self.index], MOTOR_PMAX[self.index]),
-                            velocity=clip(radians(self.reference_velocity_deg), -speed_limit, speed_limit),
+                            position=position, velocity=velocity,
                             torque=clip(torque, -torque_limit, torque_limit), kp=kp, kd=kd)
 
 

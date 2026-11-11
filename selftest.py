@@ -172,8 +172,8 @@ def test_crc(c):
             "实际 0x%02X" % protocol.crc8(b"123456789"))
     c.check("crc16(\"123456789\") == 0x6F91", protocol.crc16(b"123456789") == 0x6F91,
             "实际 0x%04X" % protocol.crc16(b"123456789"))
-    for name, defs, want in (("arx_x5", board_defs, 0xFB1DD6EF),
-                             ("metal_arm", metal_arm, 0xD9D04641)):
+    for name, defs, want in (("arx_x5", board_defs, 0xFA1DD55C),
+                             ("metal_arm", metal_arm, 0xD6D04188)):
         c.check("%s 版本码 == 0x%08X" % (name, want), defs.VERSION_CODE == want,
                 "实际 0x%08X（版本串 %s）" % (defs.VERSION_CODE, defs.VERSION_STRING))
 
@@ -185,10 +185,10 @@ def test_anchors(c):
     cases = [
         ("版本帧 arm_id=0", protocol.encode(
             TID_VERSION, protocol.encode_version(metal_arm.VERSION_CODE), 0),
-         "aa550104008e4146d0d9bc03"),
+         "aa550104008e8841d0d6f4b5"),
         ("版本帧 arm_id=1（只差 arm_id 和两个 CRC）",
          protocol.encode(TID_VERSION, protocol.encode_version(metal_arm.VERSION_CODE), 1),
-         "aa55010401d04146d0d94d13"),
+         "aa55010401d08841d0d605a5"),
         ("0x02 空包", protocol.encode(TID_ARM_INIT), "aa5502000051f088"),
         ("0x18 空包", protocol.encode(TID_ARM_RESET), "aa5518000071fdb6"),
     ]
@@ -210,14 +210,14 @@ def test_roundtrip(c):
         c.check("%s 空包往返（arm_id=1）" % name,
                 len(got) == 1 and got[0] == (tid, 1, b""), "解析出 %r" % (got,))
 
-    # 0x16：6 关节 + 夹爪，deg
+    # 0x16 包含七个角度和一个夹爪力矩上限。
     angles = [-12.5, 0.5, 30.25, 0.0, -45.5, 119.0, -141.75]
     ps = protocol.FrameParser()
-    got = ps.feed(protocol.encode(TID_ARM_CTRL_POS, protocol.encode_ctrl_pos(angles)))
-    ok = len(got) == 1 and got[0][:2] == (TID_ARM_CTRL_POS, 0) and len(got[0][2]) == 28
-    vals = struct.unpack("<7f", got[0][2]) if ok else ()
-    c.check("0x16 往返（28 字节，7 个 float）",
-            ok and all(abs(a - b) < 1e-5 for a, b in zip(vals, angles)),
+    got = ps.feed(protocol.encode(TID_ARM_CTRL_POS, protocol.encode_ctrl_pos(angles, 0.5)))
+    ok = len(got) == 1 and got[0][:2] == (TID_ARM_CTRL_POS, 0) and len(got[0][2]) == 32
+    vals = protocol.decode_ctrl_pos(got[0][2]) if ok else ()
+    c.check("0x16 往返（32 字节，含夹爪力矩上限）",
+            ok and vals == (tuple(angles), 0.5),
             "长度 %d / 值 %r" % (len(got[0][2]) if got else -1, vals))
 
     # 0x80：四个 u8 + 6f + 6f + f + 7u8，**按 1 字节对齐读**（uint8 段和 float 段之间没有填充）
@@ -328,8 +328,7 @@ def test_resync(c):
 
     # payload 里含 AA 55（数据区不做帧头搜索，这是"整帧丢掉"那种做法的坑）
     tricky = protocol.encode(TID_ARM_CTRL_POS,
-                             protocol.encode_ctrl_pos([0, 0, 0, 0, 0, 0, 0])[:4]
-                             + b"\xAA\x55" + b"\x00" * 22)
+                             bytes(4) + b"\xAA\x55" + bytes(protocol.CTRL_POS_LEN - 6))
     ps = protocol.FrameParser()
     got = ps.feed(tricky + good)
     c.check("payload 里含 AA 55：两个帧都解出来",
@@ -550,29 +549,29 @@ def test_gripper(c, tmpdir):
     play = make_arm(lb, 0, tmp_calib=arm_path)
     lb.inject_feedback(0, robot_state=board_defs.STATE_NORMAL, mode=board_defs.MODE_RUN,
                        gripper_deg=0.0)
-    play.send_ctrl_pos([0.0] * 6, gripper_m=0.085)
+    play.send_ctrl_pos([0.0] * 6, gripper_m=0.085, gripper_torque_limit_nm=0.5)
     tid, aid, pay = lb.last_write()
     c.check("gripper_m= 走标定换算成 raw deg",
-            tid == TID_ARM_CTRL_POS and aid == 0 and len(pay) == 28
-            and abs(struct.unpack("<7f", pay)[6] - 142.0) < 1e-4,
-            "写出的夹爪角 %r" % (struct.unpack("<7f", pay)[6] if len(pay) == 28 else None))
+            tid == TID_ARM_CTRL_POS and aid == 0 and len(pay) == 32
+            and abs(struct.unpack("<8f", pay)[6] - 142.0) < 1e-4,
+            "写出的载荷 %r" % (pay,))
 
-    play.send_ctrl_pos([0.0] * 6, gripper_m=0.0)
+    play.send_ctrl_pos([0.0] * 6, gripper_m=0.0, gripper_torque_limit_nm=0.5)
     c.check("闭合开口 0 m 下发负角",
-            abs(struct.unpack("<7f", lb.last_write()[2])[6] - (-142.0)) < 1e-5)
+            abs(struct.unpack("<8f", lb.last_write()[2])[6] - (-142.0)) < 1e-5)
 
     lb.clear()
-    play.send_ctrl_pos([0.0] * 6, gripper_raw_deg=-100.0)
+    play.send_ctrl_pos([0.0] * 6, gripper_raw_deg=-100.0, gripper_torque_limit_nm=0.5)
     c.check("gripper_raw_deg= 直给、不过标定",
-            abs(struct.unpack("<7f", lb.last_write()[2])[6] - (-100.0)) < 1e-5)
+            abs(struct.unpack("<8f", lb.last_write()[2])[6] - (-100.0)) < 1e-5)
 
     lb.clear()
-    play.send_ctrl_pos([0.0] * 6)     # 都不给 → 保持反馈里的当前角（0.0）
+    play.send_ctrl_pos([0.0] * 6, gripper_torque_limit_nm=0.5)
     c.check("夹爪两个都不给 → 保持当前（取反馈里的原始角）",
-            abs(struct.unpack("<7f", lb.last_write()[2])[6] - 0.0) < 1e-6)
+            abs(struct.unpack("<8f", lb.last_write()[2])[6] - 0.0) < 1e-6)
 
     try:
-        play.send_ctrl_pos([0.0] * 6, gripper_m=0.05, gripper_raw_deg=-10.0)
+        play.send_ctrl_pos([0.0] * 6, gripper_m=0.05, gripper_raw_deg=-10.0, gripper_torque_limit_nm=0.5)
         c.check("夹爪 m 和 raw_deg 同时给 → ValueError", False, "没抛")
     except ValueError:
         c.check("夹爪 m 和 raw_deg 同时给 → ValueError", True)
@@ -666,18 +665,20 @@ def test_gates(c, tmpdir):
 
     # ---- 0x16 控制帧 ----
     fb(ST.STATE_NORMAL, ST.MODE_RUN)
-    case("send_ctrl_pos 在 正常运行+run：放行（28 字节）",
-         lambda: arm.send_ctrl_pos([0.1] * 6), TID_ARM_CTRL_POS, 28)
+    case("send_ctrl_pos 在正常运行和 RUN 时发送 32 字节",
+         lambda: arm.send_ctrl_pos([0.1] * 6, gripper_torque_limit_nm=0.5), TID_ARM_CTRL_POS, 32)
+    case("send_ctrl_pos 要求夹爪力矩上限",
+         lambda: arm.send_ctrl_pos([0.1] * 6), exc=TypeError)
     fb(ST.STATE_NORMAL, ST.MODE_STOP)
     case("send_ctrl_pos 在 mode=stop：挡（板子只要 run 档的控制帧）",
-         lambda: arm.send_ctrl_pos([0.1] * 6), exc=GateRejected)
+         lambda: arm.send_ctrl_pos([0.1] * 6, gripper_torque_limit_nm=0.5), exc=GateRejected)
     fb(ST.STATE_WAIT_INIT, ST.MODE_RUN)
     case("send_ctrl_pos 在待初始化：挡",
-         lambda: arm.send_ctrl_pos([0.1] * 6), exc=GateRejected)
+         lambda: arm.send_ctrl_pos([0.1] * 6, gripper_torque_limit_nm=0.5), exc=GateRejected)
     case("send_ctrl_pos force=True：绕过预检",
-         lambda: arm.send_ctrl_pos([0.1] * 6, force=True), TID_ARM_CTRL_POS, 28)
+         lambda: arm.send_ctrl_pos([0.1] * 6, gripper_torque_limit_nm=0.5, force=True), TID_ARM_CTRL_POS, 32)
     case("send_ctrl_pos 关节数不对：本地就报错（参数错误，不是闸门）",
-         lambda: arm.send_ctrl_pos([0.1] * 5, force=True), exc=ValueError)
+         lambda: arm.send_ctrl_pos([0.1] * 5, gripper_torque_limit_nm=0.5, force=True), exc=ValueError)
 
     # ---- 0x18 reset ----
     fb(ST.STATE_NORMAL, ST.MODE_RUN)
@@ -881,7 +882,7 @@ def test_sim(c, tmpdir):
         ok = _sim_wait([a, b], lambda: a.mode == BD.MODE_RUN, 1.0)
         want = [0.2, 0.5, 0.5, 0.0, 0.0, 0.0]
         _sim_wait([a, b], lambda: False, 0.1,
-                  extra=lambda: a.send_ctrl_pos(want, gripper_raw_deg=0.0))
+                  extra=lambda: a.send_ctrl_pos(want, gripper_raw_deg=0.0, gripper_torque_limit_nm=0.5))
         c.check("0x16 在 run 档被受理、关节按一阶追到目标角",
                 ok and abs(a.joint_angles[0] - want[0]) < 0.01
                 and abs(a.joint_angles[1] - want[1]) < 0.01,

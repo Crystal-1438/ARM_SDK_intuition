@@ -222,6 +222,10 @@ class Arm:
                 self.dynamics_status = error.status
                 self.actual_mode = ArmMode.STOP
                 self.event(now, "dynamics_error", error.status.name)
+        gripper = self.bank.motors[6]
+        gripper.torque_limit_nm = (self.control.gripper_torque_limit_nm
+                                   if self.state == RobotState.NORMAL and self.actual_mode == ArmMode.RUN
+                                   and self.control is not None else None)
         for i, motor in enumerate(self.bank.motors):
             motor.mode = self.actual_mode
             if self.actual_mode != ArmMode.RUN:
