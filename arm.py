@@ -437,7 +437,7 @@ class Arm:
         return self._send(tid)
 
     def send_ctrl_pos(self, joint_rad, gripper_m=None, *, gripper_raw_deg=None,
-                      force=False):
+                      torque_limit_nm=None, force=False):
         """0x16 位置指令。`joint_rad` 是 6 个关节角（**rad**）。
 
         夹爪目标三选一：
@@ -447,9 +447,11 @@ class Arm:
 
         闸门：state == 正常运行(4) **且** mode == run(1) + 遥控器离线。
 
-        ⚠ **软限位不在这里夹**（`self.board_defs.clamp_axis()` 给你自己夹）。板子那边确实会
-        `fclip`，但**只对 `motor_inited` 为真的电机生效** —— 没初始化过的电机不受保护，
-        而且它是静默夹的，你从期望角上看不出来。
+        `torque_limit_nm` 按 J1～J6、夹爪提供 7 个电机力矩上限，单位 N·m。
+        每个值须为有限非负数。值为 0 时，请求零力矩。
+
+        板子按机型配置限制已初始化电机的角度。
+        调用 `self.board_defs.clamp_axis()` 可在发送前限制角度目标。
         """
         name = "send_ctrl_pos"
         angles = units.check_joint_seq(joint_rad, i18n.tr("arm.joint_angle"))
@@ -467,7 +469,7 @@ class Arm:
         angles_deg = units.rad_seq_to_deg(angles)
         grip_deg = self._gripper_deg_for_send(gripper_m, gripper_raw_deg)
         return self._send(protocol.TID_ARM_CTRL_POS,
-                          protocol.encode_ctrl_pos(list(angles_deg) + [grip_deg]))
+                          protocol.encode_ctrl_pos(list(angles_deg) + [grip_deg], torque_limit_nm))
 
     def reset(self, *, force=False):
         """0x18 一键复位：走一段 `ARM_AUTO_RESET_TIME_S` 的轨迹回复位位姿，**不做夹爪找零**，

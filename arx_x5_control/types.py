@@ -88,6 +88,7 @@ class Command:
     joint_angle: tuple[float, ...] = ()
     gripper_angle: float = 0.0
     api_version: int = 1
+    torque_limit_nm: tuple[float, ...] | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "kind", CommandKind(self.kind))
@@ -96,6 +97,11 @@ class Command:
             self.joint_angle, 6 if position else 0, "joint_angle"))
         if not isfinite(self.gripper_angle):
             raise ValueError("gripper_angle must be finite")
+        if self.torque_limit_nm is not None:
+            limits = finite_tuple(self.torque_limit_nm, 7, "torque_limit_nm")
+            if not position or any(value < 0 for value in limits):
+                raise ValueError("torque_limit_nm requires a position command and nonnegative values")
+            object.__setattr__(self, "torque_limit_nm", limits)
 
 
 @dataclass(frozen=True)

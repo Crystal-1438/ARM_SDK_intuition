@@ -20,7 +20,6 @@
 不碰硬件。
 """
 
-import struct
 import threading
 import time
 
@@ -196,11 +195,15 @@ class SimLink(Link):
             elif tid in _EMPTY_MODE_TID_TO_MODE and board.state == board_defs.STATE_NORMAL \
                     and not board.lost:
                 board.mode = _EMPTY_MODE_TID_TO_MODE[tid]
-            elif tid == protocol.TID_ARM_CTRL_POS and \
-                    len(payload) == protocol.CTRL_POS_LEN:
+            elif tid == protocol.TID_ARM_CTRL_POS:
                 # 三重闸门：state==normal & mode==run & 遥控器离线（最后一条查不到）
                 if board.state == board_defs.STATE_NORMAL and board.mode == board_defs.MODE_RUN:
-                    board.target = list(struct.unpack("<7f", payload))
+                    try:
+                        target, _ = protocol.decode_ctrl_pos(payload)
+                    except ValueError:
+                        pass
+                    else:
+                        board.target = list(target)
             else:
                 ack = None   # 认不出来的 tid：静默丢弃（和板子一样）
 
