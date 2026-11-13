@@ -148,6 +148,7 @@ class CommandLayer:
                 elif g["total_ms"] >= 10000:
                     self._gripper_finish(True)
             else:
+                self.gripper_torque = 0.0
                 self._gripper_step(-1)
                 self.gripper_angle = max(self.gripper_angle, g["back_target"])
                 g["back_ms"] += elapsed

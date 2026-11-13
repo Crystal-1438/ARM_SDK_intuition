@@ -382,7 +382,7 @@ class SDKTests(unittest.TestCase):
                 arm.send_ctrl_pos((0,-0.2,0.2,0,0,0),gripper_m=0.05)
             arm.send_ctrl_pos((0,-0.2,0.2,0,0,0),gripper_m=0.05,gripper_torque_limit_nm=5)
             controls = {}
-            for now in range(2220,2600):
+            for now in range(2220,3220):
                 for request in link.step(now).motor_requests:
                     if request.action == A.CONTROL:
                         controls[request.motor_index] = request
@@ -396,7 +396,7 @@ class SDKTests(unittest.TestCase):
             self.assertIs(arm.board_defs,link.board_defs)
             self.assertNotEqual(arm.board_defs.JOINT_ANGLE_MIN_RAD,sdk.board_defs.arx_x5.JOINT_ANGLE_MIN_RAD)
             arm.stop()
-            for now in range(2600,2610): link.step(now)
+            for now in range(3220,3230): link.step(now)
             self.assertEqual(arm.mode,link.board_defs.MODE_STOP)
 
     def test_factory_gripper_table(self):

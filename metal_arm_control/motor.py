@@ -1,6 +1,6 @@
 """Motor control policy, feedback freshness and semantic requests (no CAN)."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from math import degrees, isfinite, radians
 
 from sdk.board_defs.metal_arm import GRIPPER_TORQUE_MAX_NM
@@ -101,11 +101,17 @@ class Motor:
         # Zero gains on joints in passive modes. Gravity mode keeps gripper gains.
         passive = self.mode == ArmMode.DAMPING or (self.mode == ArmMode.GRAVITY and self.index < 6)
         self.position_pid.config = ZERO_PID if passive else POSITION_PID[self.index]
-        self.speed_pid.config = ZERO_PID if passive else SPEED_PID[self.index]
+        self.speed_pid.config = ZERO_PID if passive and self.index != 6 else SPEED_PID[self.index]
+        if self.index == 6:
+            config = self.speed_pid.config
+            self.speed_pid.config = replace(config, output_limit=min(
+                config.output_limit, GRIPPER_TORQUE_MAX_NM, self.torque_limit_nm))
         self.reference_velocity_deg = self.position_pid.step(self.reference_deg, self.position_deg) + self.speed_comp
-        torque = self.speed_pid.step(self.reference_velocity_deg, self.velocity_deg) + self.output_comp
+        torque = self.speed_pid.step(self.reference_velocity_deg, self.velocity_deg)
         if not enabled or not self.motion_ready(now):
             return self.request(MotorAction.SOFT_STOP, now)
+        if self.index == 6:
+            return self.request(MotorAction.CONTROL, now, torque=torque if isfinite(torque) else 0.0)
         kp, kd = MOTOR_KP[self.index], MOTOR_KD[self.index]
         if self.mode == ArmMode.DAMPING:
             kp = 0.0
@@ -113,16 +119,10 @@ class Motor:
             kp = kd = 0.0
         position = radians(self.reference_deg)
         speed_limit, torque_limit = MOTOR_VMAX[self.index], MOTOR_TMAX[self.index]
-        position = clip(position, -MOTOR_PMAX[self.index], MOTOR_PMAX[self.index])
-        velocity = clip(radians(self.reference_velocity_deg), -speed_limit, speed_limit)
-        if self.index == 6:
-            torque += kp * (position - self.position) + kd * (velocity - self.velocity)
-            if not isfinite(torque):
-                torque = 0.0
-            torque_limit = min(torque_limit, self.torque_limit_nm)
-            kp = kd = 0.0
+        torque += self.output_comp
         return self.request(MotorAction.CONTROL, now,
-                            position=position, velocity=velocity,
+                            position=clip(position, -MOTOR_PMAX[self.index], MOTOR_PMAX[self.index]),
+                            velocity=clip(radians(self.reference_velocity_deg), -speed_limit, speed_limit),
                             torque=clip(torque, -torque_limit, torque_limit), kp=kp, kd=kd)
 
 
