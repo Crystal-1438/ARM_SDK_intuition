@@ -472,7 +472,6 @@ _ZH.update({
     "arm.bytes_no_version": "  收到了字节但没有版本包：多半是噪声（板子没握手时"
                             "每 100 ms 会自己发一帧版本包）。",
     "arm.joint_angle": "关节角(rad)",
-    "arm.joint_vel": "关节角速度(rad/s)",
     "arm.gate_init_state": "总模式不对：现在 %s / %s。要能在「%s」，或「%s」+ mode 是 "
                            "stop/damping（run/gravity 下位置环在跑，板子故意不接）。",
     "arm.gate_setzero_state": "总模式不对：现在 %s，设零只能在「%s」发起。",
@@ -844,7 +843,6 @@ _EN.update({
     "arm.bytes_no_version": "  bytes arrived but no version packet: most likely noise "
                             "(before handshake the board sends one by itself every 100 ms).",
     "arm.joint_angle": "joint angles (rad)",
-    "arm.joint_vel": "joint velocities (rad/s)",
     "arm.gate_init_state": "wrong overall state: now %s / %s. Allowed in \"%s\", or in "
                            "\"%s\" with mode stop/damping (under run/gravity the position "
                            "loop is live and the board deliberately ignores it).",

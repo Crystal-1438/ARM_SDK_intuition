@@ -52,21 +52,19 @@ result = controller.step(now_ms, commands=commands, motor_feedback=feedback)
 | `STOP` | `NORMAL` → STOP |
 | `DAMPING` | `NORMAL` → DAMPING |
 | `POSITION` | `NORMAL/RUN`；6 个角度及夹爪角度 |
-| `POSITION_VELOCITY` | `NORMAL/RUN`；6 个角度、6 个速度及夹爪角度 |
 | `RESET` | `NORMAL` 且全电机在线；执行六轴复位 |
 
-非位置命令使用空角度数组和空速度数组。`POSITION` 使用 6 个关节角。`POSITION_VELOCITY` 同时使用 6 个角度和 6 个速度。
+非位置命令使用空角度数组。`POSITION` 使用 6 个关节角。
 
 命令周期为 2 ms。TD 参数为 `r=(1000,4000,4000,2000,2000,2000)`、`h=0.002`、`h0=0.004`。`follow()` 同步位置，并清零速度和加速度。控制器先限制目标角度，再选择参考值来源：
 
 | 条件 | 位置 | 速度 | 加速度 |
 | --- | --- | --- | --- |
 | 自动规划运行 | 规划位置 | 规划速度 × `PLAN_SPEED_COMP_COEF` | 规划解析加速度 |
-| `POSITION_VELOCITY` | TD 位置 | 外部速度 | 0 |
 | RUN 普通位置目标 | 0.16 s 五次样条位置 | 样条解析速度 | 样条解析加速度 |
 | STOP、DAMPING、GRAVITY | TD 位置 | TD 速度 | 0 |
 
-样条每次命令更新推进 2 ms。目标改变时，控制器从当前参考状态重规划。重规划保留位置、速度和加速度。自动规划及外部速度通道同步该状态。被动模式同步反馈位置，并将参考速度和加速度置零。最终电机请求受驱动量程限制。
+样条每次命令更新推进 2 ms。目标改变时，控制器从当前参考状态重规划。重规划保留位置、速度和加速度。自动规划同步该状态。被动模式同步反馈位置，并将参考速度和加速度置零。最终电机请求受驱动量程限制。
 
 关节参考值出现非有限数时，本周期输出 DAMPING。控制器清零参考速度和加速度，并产生 `reference_error` 事件。
 

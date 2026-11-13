@@ -31,6 +31,20 @@ def feedback_frame(i, p=0, v=0, t=0, status=1):
 
 
 class ProtocolTests(unittest.TestCase):
+    def test_position_frame_requires_gripper_torque_limit(self):
+        angles = (0, 1, 2, 3, 4, 5, 6)
+        with self.assertRaises(TypeError):
+            sdk.protocol.encode_ctrl_pos(angles)
+        for limit in (0, 0.5):
+            payload = sdk.protocol.encode_ctrl_pos(angles, limit)
+            self.assertEqual(len(payload), 32)
+            self.assertEqual(sdk.protocol.decode_ctrl_pos(payload), (angles, limit))
+        for limit in (-1, float("nan"), float("inf"), 1e40):
+            with self.subTest(limit=limit), self.assertRaises(ValueError):
+                sdk.protocol.encode_ctrl_pos(angles, limit)
+        with self.assertRaises(ValueError):
+            sdk.protocol.decode_ctrl_pos(payload[:28])
+
     def test_special_commands_all_seven_motors(self):
         for i in range(7):
             for action, tail in ((A.ENABLE, 0xfc), (A.DISABLE, 0xfd), (A.SAVE_ZERO, 0xfe)):
@@ -228,13 +242,6 @@ class ControlTests(unittest.TestCase):
         for actual, gravity in zip(arm.dynamics_torque, arm.gravity_torque):
             self.assertAlmostEqual(actual, gravity)
 
-        # Explicit velocity commands have no acceleration field or stale spline acceleration.
-        self.step([Command(0, K.POSITION, (2,-3,4,1,2,-1), 0)])
-        for _ in range(4): self.step()
-        self.assertGreater(max(map(abs, arm.command.acceleration)), 1.)
-        self.step([Command(0, K.POSITION_VELOCITY, target, 0, joint_velocity=(1,2,3,4,5,6))])
-        for _ in range(4): check_requests(self.step())
-        self.assertEqual(arm.command.acceleration, [0.]*6)
         for mode in (K.DAMPING, K.STOP):
             self.step([Command(0, mode)])
             for _ in range(4): self.step()
@@ -259,7 +266,7 @@ class ControlTests(unittest.TestCase):
 
     def test_passive_modes_and_native_pd(self):
         # metal-python-ros bccf3c8 motor_config.cpp: slave_arm follow gains.
-        gains = ((200,3), (500,5), (400,5), (200,2), (20,0.1), (20,0.1), (20,0.1))
+        gains = ((200,3), (500,5), (400,5), (200,2), (20,0.1), (20,0.1))
         for i, (kp, kd) in enumerate(gains):
             with self.subTest(motor=i+1):
                 m = Motor(0, i)
@@ -276,10 +283,24 @@ class ControlTests(unittest.TestCase):
                 m.mode = ArmMode.GRAVITY
                 m.output_comp = 3.2
                 r = m.control(0)
-                self.assertEqual((r.kp, r.kd), (0,0) if i < 6 else (kp,kd))
+                self.assertEqual((r.kp, r.kd), (0,0))
                 self.assertEqual(r.torque, 3.2)
                 m.mode = ArmMode.DAMPING
                 self.assertEqual((m.control(0).kp, m.control(0).kd), (0,kd))
+
+    def test_gripper_torque_is_limited_in_each_enabled_mode(self):
+        m = Motor(0, 6)
+        m.accept(MotorFeedback(0, 6, 0, position=0.0, velocity=-1.0, error_code=1))
+        m.reference_deg = 90
+        for mode, limit in ((ArmMode.RUN, 0.5), (ArmMode.GRAVITY, MOTOR_TMAX[6]),
+                            (ArmMode.DAMPING, MOTOR_TMAX[6])):
+            with self.subTest(mode=mode):
+                m.mode = mode
+                m.torque_limit_nm = limit
+                r = m.control(0)
+                self.assertEqual((r.kp, r.kd), (0, 0))
+                self.assertGreater(r.torque, 0)
+                self.assertLessEqual(r.torque, limit)
 
 
 class DynamicsTests(unittest.TestCase):
@@ -357,14 +378,25 @@ class SDKTests(unittest.TestCase):
             self.assertEqual(arm.robot_state,link.board_defs.STATE_NORMAL)
             arm.start()
             for now in range(2210,2220): link.step(now)
-            arm.send_ctrl_pos((0,-0.2,0.2,0,0,0),gripper_m=0.05)
-            for now in range(2220,2600): link.step(now)
+            with self.assertRaises(TypeError):
+                arm.send_ctrl_pos((0,-0.2,0.2,0,0,0),gripper_m=0.05)
+            arm.send_ctrl_pos((0,-0.2,0.2,0,0,0),gripper_m=0.05,gripper_torque_limit_nm=5)
+            controls = {}
+            for now in range(2220,3220):
+                for request in link.step(now).motor_requests:
+                    if request.action == A.CONTROL:
+                        controls[request.motor_index] = request
+                        if request.motor_index == 6:
+                            self.assertEqual((request.kp, request.kd), (0.0, 0.0))
+                            self.assertLessEqual(abs(request.torque), 5.0)
+            self.assertEqual(set(controls), set(range(7)))
+            self.assertGreater(controls[1].kp, 0.0)
             self.assertAlmostEqual(arm.joint_angles[1],-0.2,delta=0.02)
             self.assertAlmostEqual(arm.gripper_opening,0.05,delta=0.002)
             self.assertIs(arm.board_defs,link.board_defs)
             self.assertNotEqual(arm.board_defs.JOINT_ANGLE_MIN_RAD,sdk.board_defs.arx_x5.JOINT_ANGLE_MIN_RAD)
             arm.stop()
-            for now in range(2600,2610): link.step(now)
+            for now in range(3220,3230): link.step(now)
             self.assertEqual(arm.mode,link.board_defs.MODE_STOP)
 
     def test_factory_gripper_table(self):

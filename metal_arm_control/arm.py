@@ -6,7 +6,7 @@ from .gravity_compensation import DynamicsCompensator, DynamicsError, DynamicsSt
 
 from .calibration import ZeroCalibration
 from .command import CommandLayer
-from .config import ArmConfig, RESET_ANGLE
+from .config import ArmConfig, RESET_ANGLE, board_defs
 from .motor import MotorBank
 from .types import ArmFeedback, ArmMode, CommandKind, Event, RobotState
 
@@ -127,7 +127,7 @@ class Arm:
             else:
                 self.control = None
                 self.mode = MODE_COMMANDS[kind]
-        elif kind in (CommandKind.POSITION, CommandKind.POSITION_VELOCITY):
+        elif kind == CommandKind.POSITION:
             if self.state != RobotState.NORMAL or self.mode != ArmMode.RUN:
                 self.reject(now, command, "requires NORMAL/RUN")
             else:
@@ -222,6 +222,13 @@ class Arm:
                 self.dynamics_status = error.status
                 self.actual_mode = ArmMode.STOP
                 self.event(now, "dynamics_error", error.status.name)
+        gripper = self.bank.motors[6]
+        limit = (self.control.gripper_torque_limit_nm
+                 if self.state == RobotState.NORMAL and self.actual_mode == ArmMode.RUN
+                 and self.control is not None else None)
+        gripper.torque_limit_nm = board_defs.GRIPPER_TORQUE_MAX_NM if limit is None else limit
+        if self.state == RobotState.INITIALIZING and cmd.gripper_torque > 0:
+            gripper.torque_limit_nm = cmd.gripper_torque
         for i, motor in enumerate(self.bank.motors):
             motor.mode = self.actual_mode
             if self.actual_mode != ArmMode.RUN:
@@ -236,7 +243,6 @@ class Arm:
                 motor.output_comp = c.direction[i] * (self.dynamics_torque[i] + damping) * c.torque_scale[i]
             else:
                 motor.reference_deg = cmd.gripper_angle
-                motor.output_comp = cmd.gripper_torque
 
     def snapshot(self, now):
         return ArmFeedback(self.id, now, self.state, self.actual_mode, self.mode,

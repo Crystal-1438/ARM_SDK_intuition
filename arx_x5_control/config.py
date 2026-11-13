@@ -16,12 +16,13 @@ JOINT_QUINTIC_DURATION_S = 0.16
 PLAN_SPEED_COMP_COEF = (1.0,) * 6
 MOTOR_IDS = (1, 2, 4, 5, 6, 7, 8)
 TX_GROUPS = (0x55, 0x22, 0x22, 0x44, 0x44, 0x88, 0x88)
-MOTOR_KP = (0.0, 10.0, 10.0, 50.0, 25.0, 10.0, 8.0)
-MOTOR_KD = (35.0, 50.0, 50.0, 0.8, 0.8, 1.0, 0.1)
+MOTOR_KP = (0.0, 10.0, 10.0, 50.0, 25.0, 10.0, 0.0)
+MOTOR_KD = (35.0, 50.0, 50.0, 0.8, 0.8, 1.0, 0.0)
 POSITION_PID = tuple(PIDConfig(kp, ki, 50, 200, 1000, irange) for kp, ki, irange in (
     (6, 0, 1), (4, 0, 1), (4, 0, 1), (6, 0.08, 0),
-    (6, 0.08, 0), (6, 0.08, 0), (6, 0.08, 0)))
-SPEED_PID = tuple(PIDConfig(output_limit=12 if i < 3 else 10) for i in range(7))
+    (6, 0.08, 0), (6, 0.08, 0))) + (PIDConfig(kp=6.0, output_limit=180.0),)
+SPEED_PID = tuple(PIDConfig(output_limit=12 if i < 3 else 10) for i in range(6)) + (
+    PIDConfig(kp=0.02, output_limit=10.0),)
 ZERO_PID = PIDConfig()
 
 

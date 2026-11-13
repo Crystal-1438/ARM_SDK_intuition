@@ -719,6 +719,7 @@ class ConsoleSession:
         encoding still go through `Arm`, we do not build the frame here."""
         try:
             view.arm.send_ctrl_pos(view.target[:6],
+                                   gripper_torque_limit_nm=self.board_defs.DEFAULT_GRIPPER_TORQUE_LIMIT_NM,
                                    gripper_raw_deg=units.rad_to_deg(view.target[GRIPPER]),
                                    force=True)
         except ArError as e:

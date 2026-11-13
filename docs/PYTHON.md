@@ -101,7 +101,7 @@ def operate(link, arm_ids=(0,)):
         targets = [arm.joint_angles for arm in arms]
         for _ in range(100):
             for arm, target in zip(arms, targets):
-                arm.send_ctrl_pos(target)
+                arm.send_ctrl_pos(target, gripper_torque_limit_nm=0.5)
             time.sleep(0.01)
     finally:
         # 在链路仍可用时提交退出模式；所有权归外层 with 管理。

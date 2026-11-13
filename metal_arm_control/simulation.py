@@ -57,6 +57,11 @@ class SimulatedMotors:
                         # Feedforward gravity is cancelled by assumed load; gripper has none.
                         if i == 6:
                             speed += request.torque / request.kd
+                    elif i == 6 and request.kp == 0:
+                        # 模拟夹爪采用 0.15 N·m/(rad/s) 的粘性阻尼和 20 ms 响应时间。
+                        previous_speed = self.velocities[a][i]
+                        target_speed = request.torque / 0.15
+                        speed = previous_speed + min(dt / 0.02, 1.0) * (target_speed - previous_speed)
                     speed = clip(speed, -6, 6)
                 old = self.positions[a][i]
                 position = old + speed * dt

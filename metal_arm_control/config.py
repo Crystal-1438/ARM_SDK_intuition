@@ -21,17 +21,16 @@ MOTOR_PMAX = (6.28,) * 7
 MOTOR_VMAX = (10.0, 10.0, 10.0, 10.0, 30.0, 30.0, 30.0)
 MOTOR_TMAX = (30.0, 120.0, 30.0, 30.0, 20.0, 20.0, 20.0)
 # Vendor slave_arm follow_mit_kp / follow_mit_kd, J1–J6 then gripper.
-MOTOR_KP = (200.0, 500.0, 400.0, 200.0, 20.0, 20.0, 20.0)
-MOTOR_KD = (3.0, 5.0, 5.0, 2.0, 0.1, 0.1, 0.1)
+MOTOR_KP = (200.0, 500.0, 400.0, 200.0, 20.0, 20.0, 0.0)
+MOTOR_KD = (3.0, 5.0, 5.0, 2.0, 0.1, 0.1, 0.0)
 # Keep the ARX millisecond scheduler / 250 Hz motor cadence. The vendor
 # C++ loop targets 400 Hz; do not claim that timing for this Python port.
 MOTOR_PERIOD_MS = 4
 TX_GROUPS = (0x11, 0x11, 0x22, 0x22, 0x44, 0x44, 0x88)
 FEEDBACK_TIMEOUT_MS = 100
 ZERO_PID = PIDConfig()
-# Metal has native MIT PD control; do not layer ARX's host PID on top.
-POSITION_PID = (ZERO_PID,) * 7
-SPEED_PID = (ZERO_PID,) * 7
+POSITION_PID = (ZERO_PID,) * 6 + (PIDConfig(kp=17.45, output_limit=180.0),)
+SPEED_PID = (ZERO_PID,) * 6 + (PIDConfig(kp=0.02, output_limit=20.0),)
 GRAVITY_SCALES = (1.2, 1.15, 1.1, 1.15, 1.0, 1.0)
 FRICTION_COEFFICIENTS = (0.15, 0.3025, 0.52, 0.42, 0.015, 0.015)
 FRICTION_SPEED_LIMITS = (None, None, 0.8, 1.2, None, None)
