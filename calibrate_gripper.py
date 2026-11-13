@@ -280,7 +280,7 @@ class Calibrator:
         if self._jogging():
             s = self.arm.snapshot()
             self.arm.send_ctrl_pos(s.joint_angles, gripper_raw_deg=self.target_deg,
-                                   gripper_torque_limit_nm=self.arm.board_defs.GRIPPER_TORQUE_MAX_NM)
+                                   gripper_torque_limit_nm=self.arm.board_defs.DEFAULT_GRIPPER_TORQUE_LIMIT_NM)
             self._stale_warned = False
             return
         # 不点动也要喂：0x01 是板子认的有效帧，纯保活用（3 s 收不到就切阻尼）。

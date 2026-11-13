@@ -47,7 +47,7 @@ def demo():
             link.check_health()
             for arm, target in zip(arms, targets):
                 arm.send_ctrl_pos(target, gripper_raw_deg=20.0,
-                                  gripper_torque_limit_nm=arm.board_defs.GRIPPER_TORQUE_MAX_NM)
+                                  gripper_torque_limit_nm=arm.board_defs.DEFAULT_GRIPPER_TORQUE_LIMIT_NM)
             time.sleep(0.01)
         for arm in arms:
             arm.gravity()

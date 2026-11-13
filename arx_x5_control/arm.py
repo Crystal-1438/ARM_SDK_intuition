@@ -223,7 +223,7 @@ class Arm:
         limit = (self.control.gripper_torque_limit_nm
                  if self.state == RobotState.NORMAL and self.actual_mode == ArmMode.RUN
                  and self.control is not None else None)
-        gripper.torque_limit_nm = board_defs.GRIPPER_TORQUE_MAX_NM if limit is None else limit
+        gripper.torque_limit_nm = board_defs.DEFAULT_GRIPPER_TORQUE_LIMIT_NM if limit is None else limit
         if self.state == RobotState.INITIALIZING and cmd.gripper_torque > 0:
             gripper.torque_limit_nm = cmd.gripper_torque
         for i, motor in enumerate(self.bank.motors):

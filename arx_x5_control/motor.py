@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field, replace
 from math import degrees, isfinite, radians
 
-from sdk.board_defs.arx_x5 import GRIPPER_TORQUE_MAX_NM
+from sdk.board_defs.arx_x5 import DEFAULT_GRIPPER_TORQUE_LIMIT_NM, GRIPPER_TORQUE_MAX_NM
 
 from .config import MOTOR_IDS, MOTOR_KP, MOTOR_KD, POSITION_PID, SPEED_PID, TX_GROUPS, ZERO_PID
 from .numerics import PID, clip
@@ -35,7 +35,7 @@ class Motor:
     output_comp: float = 0.0
     reference_velocity_deg: float = 0.0
     mode: ArmMode = ArmMode.STOP
-    torque_limit_nm: float = field(init=False, default=GRIPPER_TORQUE_MAX_NM)
+    torque_limit_nm: float = field(init=False, default=DEFAULT_GRIPPER_TORQUE_LIMIT_NM)
     position_pid: PID = field(init=False)
     speed_pid: PID = field(init=False)
 
