@@ -194,7 +194,9 @@ arm.send_ctrl_pos(joints, gripper_torque_limit_nm=0.5)
 每次调用都必须显式传入 `gripper_torque_limit_nm`。
 该值是夹爪电机输出轴的力矩上限，单位为 N·m。
 该值必须有限且非负。零表示请求零夹爪力矩。
-后端对夹爪合计力矩指令执行双向限幅。
+后端对每条夹爪控制指令执行双向力矩限幅。
+使用位置指令时，后端取给定上限与机型编码上限中的较小值。
+其余控制来源使用机型编码上限。
 
 **公共异常**：`FeedbackStale`（没有反馈或反馈过旧，无法判断闸门）、`GateRejected`
 （预检不通过，**帧未发出**）、`ValueError` / `TypeError`（参数本身不合法）、`LinkError`

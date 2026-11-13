@@ -266,7 +266,7 @@ class ControlTests(unittest.TestCase):
 
     def test_passive_modes_and_native_pd(self):
         # metal-python-ros bccf3c8 motor_config.cpp: slave_arm follow gains.
-        gains = ((200,3), (500,5), (400,5), (200,2), (20,0.1), (20,0.1), (20,0.1))
+        gains = ((200,3), (500,5), (400,5), (200,2), (20,0.1), (20,0.1))
         for i, (kp, kd) in enumerate(gains):
             with self.subTest(motor=i+1):
                 m = Motor(0, i)
@@ -283,10 +283,24 @@ class ControlTests(unittest.TestCase):
                 m.mode = ArmMode.GRAVITY
                 m.output_comp = 3.2
                 r = m.control(0)
-                self.assertEqual((r.kp, r.kd), (0,0) if i < 6 else (kp,kd))
+                self.assertEqual((r.kp, r.kd), (0,0))
                 self.assertEqual(r.torque, 3.2)
                 m.mode = ArmMode.DAMPING
                 self.assertEqual((m.control(0).kp, m.control(0).kd), (0,kd))
+
+    def test_gripper_torque_is_limited_in_each_enabled_mode(self):
+        m = Motor(0, 6)
+        m.accept(MotorFeedback(0, 6, 0, position=0.0, velocity=-1.0, error_code=1))
+        m.reference_deg = 90
+        for mode, limit in ((ArmMode.RUN, 0.5), (ArmMode.GRAVITY, MOTOR_TMAX[6]),
+                            (ArmMode.DAMPING, MOTOR_TMAX[6])):
+            with self.subTest(mode=mode):
+                m.mode = mode
+                m.torque_limit_nm = limit
+                r = m.control(0)
+                self.assertEqual((r.kp, r.kd), (0, 0))
+                self.assertGreater(r.torque, 0)
+                self.assertLessEqual(r.torque, limit)
 
 
 class DynamicsTests(unittest.TestCase):

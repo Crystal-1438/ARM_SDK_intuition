@@ -3,6 +3,8 @@
 from dataclasses import dataclass, field
 from math import degrees, isfinite, radians
 
+from sdk.board_defs.arx_x5 import GRIPPER_TORQUE_MAX_NM
+
 from .config import MOTOR_IDS, MOTOR_KP, MOTOR_KD, POSITION_PID, SPEED_PID, TX_GROUPS, ZERO_PID
 from .numerics import PID, clip
 from .types import ArmMode, MotorAction, MotorFeedback, MotorRequest
@@ -33,7 +35,7 @@ class Motor:
     output_comp: float = 0.0
     reference_velocity_deg: float = 0.0
     mode: ArmMode = ArmMode.STOP
-    torque_limit_nm: float | None = None
+    torque_limit_nm: float = field(init=False, default=GRIPPER_TORQUE_MAX_NM)
     position_pid: PID = field(init=False)
     speed_pid: PID = field(init=False)
 
@@ -128,7 +130,7 @@ class Motor:
         speed_limit, torque_limit = (18.0, 30.0) if self.encos else (45.0, 10.0)
         position = clip(position, -12.5, 12.5)
         velocity = clip(radians(self.reference_velocity_deg), -speed_limit, speed_limit)
-        if self.index == 6 and self.torque_limit_nm is not None:
+        if self.index == 6:
             torque += kp * (position - self.position) + kd * (velocity - self.velocity)
             if not isfinite(torque):
                 torque = 0.0

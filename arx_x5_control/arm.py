@@ -6,7 +6,7 @@ from .gravity_compensation import DynamicsCompensator, DynamicsError, DynamicsSt
 
 from .calibration import ZeroCalibration
 from .command import CommandLayer
-from .config import ArmConfig, RESET_ANGLE
+from .config import ArmConfig, RESET_ANGLE, board_defs
 from .motor import MotorBank
 from .types import ArmFeedback, ArmMode, CommandKind, Event, RobotState
 
@@ -220,9 +220,10 @@ class Arm:
                 self.actual_mode = ArmMode.STOP
                 self.event(now, "dynamics_error", error.status.name)
         gripper = self.bank.motors[6]
-        gripper.torque_limit_nm = (self.control.gripper_torque_limit_nm
-                                   if self.state == RobotState.NORMAL and self.actual_mode == ArmMode.RUN
-                                   and self.control is not None else None)
+        limit = (self.control.gripper_torque_limit_nm
+                 if self.state == RobotState.NORMAL and self.actual_mode == ArmMode.RUN
+                 and self.control is not None else None)
+        gripper.torque_limit_nm = board_defs.GRIPPER_TORQUE_MAX_NM if limit is None else limit
         for i, motor in enumerate(self.bank.motors):
             motor.mode = self.actual_mode
             if self.actual_mode != ArmMode.RUN:
